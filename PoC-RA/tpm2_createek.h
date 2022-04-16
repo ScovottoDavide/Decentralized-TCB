@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tpm2_types.h>
+#include "PEMconvertPub.h"
 
 #define TPM2B_SENSITIVE_CREATE_EMPTY_INIT { \
            .sensitive = { \

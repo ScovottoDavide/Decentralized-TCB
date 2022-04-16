@@ -5,6 +5,7 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tpm2_types.h>
 #include "createak_util.h"
+#include "PEMconvertPub.h"
 
 typedef struct createak_context createak_context;
 struct createak_context {

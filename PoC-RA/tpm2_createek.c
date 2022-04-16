@@ -60,6 +60,7 @@ static  createek_context ctx = {
       .hierarchy = TPM2_RH_ENDORSEMENT
     },
   },
+  .out_file_path = "/etc/tc/ek.pub.pem",
   .flags = { 0 },
   .find_persistent_handle = false
 };
@@ -187,5 +188,11 @@ if(res != TSS2_RC_SUCCESS){
       return TSS2_ESYS_RC_BAD_VALUE;
     }
 
-    return TSS2_RC_SUCCESS;
+    if (ctx.out_file_path) {
+       bool ok = tpm2_convert_pubkey_save(outPublic, ctx.out_file_path);
+       if (!ok) {
+           return TSS2_ESYS_RC_BAD_VALUE;
+       }
+   }
+  return TSS2_RC_SUCCESS;
 }

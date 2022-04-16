@@ -18,6 +18,9 @@ static createak_context ctx = {
                 .sign = "null"
             },
         },
+        .out = {
+          .pub_file = "/etc/tc/ak.pub.pem",
+        },
     },
     .flags = { 0 },
 };
@@ -185,6 +188,12 @@ static TSS2_RC create_ak(ESYS_CONTEXT *ectx) {
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
+  if (ctx.ak.out.pub_file) {
+     bool ok = tpm2_convert_pubkey_save(out_public, ctx.ak.out.pub_file);
+     if (!ok) {
+         return TSS2_ESYS_RC_BAD_VALUE;
+     }
+ }
   return TSS2_RC_SUCCESS;
 }
 
