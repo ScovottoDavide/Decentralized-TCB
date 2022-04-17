@@ -5,6 +5,7 @@
 #include <tss2/tss2_tctildr.h>
 #include "tpm2_createek.h"
 #include "tpm2_createak.h"
+#include "PCR9Extend.h"
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT* esys_context);
 
@@ -48,6 +49,9 @@ int main() {
   }
 
   tpm2_getCap_handles_persistent(esys_context);
+
+  ExtendPCR9(esys_context);
+
   return 0;
 }
 
