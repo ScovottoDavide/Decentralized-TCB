@@ -10,7 +10,7 @@
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT* esys_context);
 
 int main() {
-  printf("Starting Attester\n");
+
   TSS2_RC tss_r;
   ESYS_CONTEXT* esys_context = NULL;
   TSS2_TCTI_CONTEXT* tcti_context = NULL;
