@@ -1,0 +1,46 @@
+From 1730559450452661899@xxx Tue Apr 19 17:41:40 +0000 2022
+X-GM-THRID: 1730559450452661899
+X-Gmail-Labels: Sent,Inbox,Opened,Starred
+Return-Path: <scovottodavide@gmail.com>
+Received: from localhost.localdomain (93-41-17-143.ip79.fastwebnet.it. [93.41.17.143])
+        by smtp.gmail.com with ESMTPSA id b8-20020a056402084800b004207931a9cbsm9189742edz.36.2022.04.19.10.41.40
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Tue, 19 Apr 2022 10:41:40 -0700 (PDT)
+From: Scovotto Davide <scovottodavide@gmail.com>
+To: 
+Cc: ScovottoDavide <scovottodavide@gmail.com>,
+	Alberto Solavagione <albertosolavagione30@gmail.com>
+Subject: [PATCH] Prova coautori
+Date: Tue, 19 Apr 2022 19:37:54 +0200
+Message-Id: <20220419173754.5027-1-scovottodavide@gmail.com>
+X-Mailer: git-send-email 2.35.1
+MIME-Version: 1.0
+Content-Transfer-Encoding: 8bit
+
+From: ScovottoDavide <scovottodavide@gmail.com>
+
+Co-authored-by: Alberto Solavagione <albertosolavagione30@gmail.com>
+Co-Developed-by: Alberto Solavagione <albertosolavagione30@gmail.com>
+Signed-off-by: Alberto Solavagione <albertosolavagione30@gmail.com>
+Signed-off-by: Davide Scovotto <scovottodavide@gmail.com>
+---
+ PoC-RA/PoC_Attester.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/PoC-RA/PoC_Attester.c b/PoC-RA/PoC_Attester.c
+index 464cb38..f0b4c1a 100644
+--- a/PoC-RA/PoC_Attester.c
++++ b/PoC-RA/PoC_Attester.c
+@@ -11,7 +11,7 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT* esys_context);
+ 
+ int main() {
+ 
+-
++  printf("\tStarting Attester\n");
+   TSS2_RC tss_r;
+   ESYS_CONTEXT* esys_context = NULL;
+   TSS2_TCTI_CONTEXT* tcti_context = NULL;
+-- 
+2.35.1
+
+
