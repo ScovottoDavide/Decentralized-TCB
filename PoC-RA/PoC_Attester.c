@@ -50,7 +50,7 @@ int main() {
 
   tpm2_getCap_handles_persistent(esys_context);
 
-  ExtendPCR9(esys_context);
+  ExtendPCR9(esys_context, "sha256");
 
   return 0;
 }
