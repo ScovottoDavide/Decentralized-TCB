@@ -6,13 +6,13 @@ CC = gcc
 LIBS = -ltss2-esys -ltss2-tctildr -lssl -lcrypto
 
 # define the C source files
-SRCS = PoC_TPA.c tpm2_createek.c tpm2_createak.c createek_util.c createak_util.c PCR9Extend.c PEMconvertPub.c
+SRCS = PoC_TPA.c tpm2_createek.c tpm2_createak.c tpm2_quote.c createek_util.c createak_util.c PCR9Extend.c PEMconvertPub.c
 
 # define rule for gcc
 TARGET = PoC_TPA.c
 
 # define the executable file
-MAIN = attester
+MAIN = TPA
 
 all: $(TARGET)
 	$(CC) -o $(MAIN) $(SRCS) $(LIBS)

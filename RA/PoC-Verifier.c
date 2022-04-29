@@ -30,15 +30,14 @@ int main(int argc, char const* argv[])
 		return -1;
 	}
 
-  if(RAND_bytes(buffer, 32)){
-    int i;
-    buffer[32] = '\0';
-    for(i=0; i<strlen(buffer); i++)
-      printf("%c", buffer[i]);
-    send(sock, buffer, strlen(buffer), 0);
-  }
-
-
+  	if(RAND_bytes(buffer, 32)){
+    	int i;
+    	buffer[32] = '\0';
+    	for(i=0; buffer[i]!='\0'; i++)
+      		printf("%02x", buffer[i]);
+		printf("\n");
+    	send(sock, buffer, strlen(buffer), 0);
+  	}
 
 	return 0;
 }

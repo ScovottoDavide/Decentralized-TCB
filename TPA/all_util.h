@@ -81,3 +81,4 @@ struct tpm2_loaded_object{
   const char *path;
   tpm2_session *session;
 };
+

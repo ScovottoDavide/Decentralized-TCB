@@ -177,7 +177,7 @@ TSS2_RC start_hmac_session(ESYS_CONTEXT *ectx, TPM2B_AUTH *auth, tpm2_session **
 
 TSS2_RC tpm2_util_object_load_auth(ESYS_CONTEXT *ctx, const char *objectstr,const char *auth,
   tpm2_loaded_object *outobject,bool is_restricted_pswd_session, tpm2_handle_flags flags){
-
+  
   ESYS_CONTEXT *tmp_ctx = is_restricted_pswd_session ? NULL : ctx;
   //do_auth = true;
   tpm2_session *s = NULL;
@@ -216,13 +216,39 @@ TSS2_RC tpm2_util_object_load_auth(ESYS_CONTEXT *ctx, const char *objectstr,cons
   if (is_e) {
     handle = TPM2_RH_ENDORSEMENT;
   }
+  
+  if(handle == 0){
+    char *endptr;
+    if(objectstr == NULL || *objectstr == '\0')
+      return TSS2_ESYS_RC_BAD_VALUE;
+    unsigned long int tmp = strtoul(objectstr, &endptr, 0);
+    if(tmp > UINT32_MAX)
+      return TSS2_ESYS_RC_BAD_VALUE;
+    if(*endptr != '\0')
+      return TSS2_ESYS_RC_BAD_VALUE;
+    
+    handle = (uint32_t) tmp;
+
+    //bool res = filter_handles(&handle, flags);
+    //if(!res) return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
   if(handle != 0){
     outobject->handle = handle;
     outobject->path = NULL;
     if(is_o){
       outobject->tr_handle = ESYS_TR_RH_OWNER;
-    }else if(is_e) outobject->tr_handle = ESYS_TR_RH_ENDORSEMENT;
+    }else if(is_e) 
+      outobject->tr_handle = ESYS_TR_RH_ENDORSEMENT;
+    else {
+      // Enters here when objectstr is not "owner" or "endorsement" but when Hex Handle is passed
+      TSS2_RC rval = Esys_TR_FromTPMPublic(ctx, outobject->handle,
+            ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &outobject->tr_handle);
+      if (rval != TSS2_RC_SUCCESS) {
+        printf("(tpm2_from_tpm_public) Erro in Esys_TR_FromTPMPublic\n");
+        return TSS2_ESYS_RC_BAD_VALUE;
+      } 
+    }
 
     return TSS2_RC_SUCCESS;
   }

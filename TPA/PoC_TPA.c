@@ -8,6 +8,7 @@
 #include <tss2/tss2_tctildr.h>
 #include "tpm2_createek.h"
 #include "tpm2_createak.h"
+#include "tpm2_quote.h"
 #include "PCR9Extend.h"
 #define PORT 8080
 
@@ -20,20 +21,19 @@ int main() {
   ESYS_CONTEXT* esys_context = NULL;
   TSS2_TCTI_CONTEXT* tcti_context = NULL;
   unsigned char nonce[32] = { 0 };
-  int persistent_handles = 0;
+  int persistent_handles = 0, i;
+  FILE *file_nonce;
 
   waitRARequest(nonce); // Receive request with nonce
+  file_nonce = fopen("/etc/tc/nonce_challange", "w");
+  fprintf(stdout, "Nonce received!");
+  for(i=0; nonce[i]!='\0'; i++)
+    fprintf(file_nonce, "%02x", nonce[i]);
+  fprintf(file_nonce, "\0", nonce[i]);
+  fclose(file_nonce);
+	printf("\n");
 
-  /**
-    Assumption: Ek is at NV-Index 0x80000000, AK is at NV-Index 0x80000001
-    and they are the only persistent handles in NV-RAM.
-    See if optimizable!
-  **/
-  // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
-  persistent_handles = tpm2_getCap_handles_persistent(esys_context);
-
-  if(!persistent_handles){
-    tss_r = Tss2_TctiLdr_Initialize(getenv("TPM2TOOLS_TCTI"), &tcti_context);
+  tss_r = Tss2_TctiLdr_Initialize(getenv("TPM2TOOLS_TCTI"), &tcti_context);
     if(tss_r != TSS2_RC_SUCCESS){
       printf("Could not initialize tcti context\n");
       exit(-1);
@@ -44,14 +44,19 @@ int main() {
       printf("Could not initialize esys context\n");
       exit(-1);
     }
+  /**
+    Assumption: Ek is at NV-Index 0x80000000, AK is at NV-Index 0x80000001
+    and they are the only persistent handles in NV-RAM.
+    See if optimizable!
+  **/
+  // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
+  persistent_handles = tpm2_getCap_handles_persistent(esys_context);
+  if(persistent_handles < 0){
+    printf("Error while reading persistent handles!\n");
+    exit(-1);
+  }
 
-    TSS2_TCTI_CONTEXT* tmp = NULL;
-    tss_r = Esys_GetTcti(esys_context, &tmp);
-    if(tss_r != TSS2_RC_SUCCESS){
-      printf("Could not get tcti context\n");
-      exit(-1);
-    }
-
+  if(!persistent_handles){
     fprintf(stderr, "Generating EK...\n");
     tss_r = tpm2_createek(esys_context);
     if(tss_r != TSS2_RC_SUCCESS){
@@ -69,8 +74,12 @@ int main() {
     tpm2_getCap_handles_persistent(esys_context);
 
     ExtendPCR9(esys_context, "sha256");
-  }else {
-    printf("%d\n", nonce);
+  }
+
+  tss_r = tpm2_quote(esys_context);
+  if(tss_r != TSS2_RC_SUCCESS){
+    printf("Error while computing quote!\n");
+    exit(-1);
   }
 
   return 0;
@@ -93,6 +102,7 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT* esys_context){
     return -1;
   }
   int i = 0;
+  printf("Persistent handles present in NVRAM are %d\n", capabilityData->data.handles.count);
   for(i=0; i<capabilityData->data.handles.count; i++){
     printf("Persistent Handle: 0x%X\n", capabilityData->data.handles.handle[i]);
   }
@@ -126,6 +136,7 @@ void waitRARequest(char *nonce){
 		exit(EXIT_FAILURE);
   }
 
+  printf("\tWaiting for a request!\n\n");
 	if (listen(server_fd, 3) < 0) {
 		perror("listen");
 		exit(EXIT_FAILURE);
@@ -136,7 +147,10 @@ void waitRARequest(char *nonce){
 	}
 
   valread = read(new_socket, nonce, 32);
-  int i;
-  for(i=0; i<strlen(nonce); i++)
-    printf("%c", nonce[i]);
+  if(valread < 0 || valread > 32){
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  nonce[32] = '\0';
+
 }
