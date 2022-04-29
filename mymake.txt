@@ -1,1 +1,0 @@
-gcc -o prova PoC_Attester.c tpm2_createek.c tpm2_createak.c createek_util.c createak_util.c PCR9Extend.c PEMconvertPub.c -lssl -lcrypto -ltss2-esys -ltss2-tctildr
