@@ -26,6 +26,10 @@ int main() {
 
   waitRARequest(nonce); // Receive request with nonce
   file_nonce = fopen("/etc/tc/nonce_challange", "w");
+  if(!file_nonce){
+    fprintf(stderr, "Could not create/open file\n");
+    exit(-1);
+  }
   fprintf(stdout, "Nonce received!");
   for(i=0; nonce[i]!='\0'; i++)
     fprintf(file_nonce, "%02x", nonce[i]);
@@ -57,14 +61,14 @@ int main() {
   }
 
   if(!persistent_handles){
-    fprintf(stderr, "Generating EK...\n");
+    fprintf(stdout, "Generating EK...\n");
     tss_r = tpm2_createek(esys_context);
     if(tss_r != TSS2_RC_SUCCESS){
       printf("Error in tpm2_createek\n");
       exit(-1);
     }
-
-    fprintf(stderr, "Generating AK...\n");
+  
+    fprintf(stdout, "Generating AK...\n");
     tss_r = tpm2_createak(esys_context);
     if(tss_r != TSS2_RC_SUCCESS){
       printf("\tError creating AK\n");

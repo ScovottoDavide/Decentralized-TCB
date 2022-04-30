@@ -19,3 +19,8 @@ TSS2_RC tpm2_util_object_load(ESYS_CONTEXT *ctx, const char *objectstr, tpm2_loa
 /*TSS2_RC tpm2_get_capability(ESYS_CONTEXT *esys_context, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, TPM2_CAP capability, UINT32 property, UINT32 property_count, TPMI_YES_NO *more_data, TPMS_CAPABILITY_DATA **capability_data);
 TSS2_RC tpm2_capability_get(ESYS_CONTEXT *ectx, TPM2_CAP capability, UINT32 property, UINT32 count, TPMS_CAPABILITY_DATA **capability_data);
 TSS2_RC tpm2_capability_find_vacant_persistent_handle(ESYS_CONTEXT *ctx, bool is_platform, TPMI_DH_PERSISTENT *vacant);*/
+
+TSS2_RC tpm2_quote_internal(ESYS_CONTEXT *esys_context, tpm2_loaded_object *quote_obj,
+    TPMT_SIG_SCHEME *in_scheme, TPM2B_DATA *qualifying_data,
+    TPML_PCR_SELECTION *pcr_select, TPM2B_ATTEST **quoted,
+    TPMT_SIGNATURE **signature);
