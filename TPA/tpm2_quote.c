@@ -228,7 +228,7 @@ TSS2_RC pcr_get_banks(ESYS_CONTEXT *esys_context, TPMS_CAPABILITY_DATA *capabili
     *capability_data = *capdata_ret;
     // If the TPM support more bank algorithm that we currently
     // able to manage, throw an error
-    if (capability_data->data.assignedPCR.count > sizeof(algs->alg)) {
+    if (capability_data->data.assignedPCR.count > ARRAY_LEN(algs->alg)) {
         fprintf(stderr, "Current implementation does not support more than %zu banks, ", sizeof(algs->alg));
         free(capdata_ret);
         return TSS2_ESYS_RC_BAD_VALUE;
@@ -363,7 +363,7 @@ bool pcr_unset_pcr_sections(TPML_PCR_SELECTION *s) {
   UINT32 i, j;
 
   for(i=0; i<s->count; i++){
-    for(j=0; j<s->pcrSelections[i].sizeofSelect; i++)
+    for(j=0; j<s->pcrSelections[i].sizeofSelect; j++)
       if(s->pcrSelections[i].pcrSelect[j]) // the bit is set
         return false;
   }
@@ -397,8 +397,9 @@ TSS2_RC pcr_read_pcr_values(ESYS_CONTEXT *esys_context, TPML_PCR_SELECTION *pcr_
   pcrs->count = 0;
   do{
     TPML_DIGEST *value;
-    TSS2_RC res = Esys_PCR_Read(esys_context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-                    &pcr_selection_tmp_in, &pcr_update_counter, &pcr_selection_out, &value);
+    TSS2_RC res = Esys_PCR_Read(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
+                ESYS_TR_NONE, &pcr_selection_tmp_in, &pcr_update_counter,
+                &pcr_selection_out, &value);
     if(res != TSS2_RC_SUCCESS){
       fprintf(stderr, "Error while reading PCRs \n");
       return TSS2_ESYS_RC_BAD_VALUE;
@@ -413,9 +414,9 @@ TSS2_RC pcr_read_pcr_values(ESYS_CONTEXT *esys_context, TPML_PCR_SELECTION *pcr_
 
     free(pcr_selection_out);
 
-  }while(++pcrs->count < sizeof(pcrs->pcr_values) && !pcr_unset_pcr_sections(&pcr_selection_tmp_in));
+  }while(++pcrs->count < ARRAY_LEN(pcrs->pcr_values) && !pcr_unset_pcr_sections(&pcr_selection_tmp_in));
 
-  if (pcrs->count >= sizeof(pcrs->pcr_values) && !pcr_unset_pcr_sections(&pcr_selection_tmp_in)) {
+  if (pcrs->count >= ARRAY_LEN(pcrs->pcr_values) && !pcr_unset_pcr_sections(&pcr_selection_tmp_in)) {
        fprintf(stderr, "Too much pcrs to get!\n");
        return TSS2_ESYS_RC_BAD_VALUE;
    }
@@ -466,6 +467,7 @@ bool pcr_print(TPML_PCR_SELECTION *pcr_select, tpm2_pcrs *pcrs){
       fprintf(stdout, "\n");
 
       if(++di >= pcrs->pcr_values[vi].count){
+        //if(vi+1 == pcr_select->count - 1 && di == 8)
         di = 0;
         ++vi;
       }
@@ -733,7 +735,7 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx) {
     ctx.key.auth_str = NULL;
 
     // parse ocr list --> sha1:0,1,2,3,4,5,6,7,8,9,10+sha256:0,1,2,3,4,5,6,7,8,9,10
-    res = pcr_parse_selections("sha1:0,1,2,3,4,5,6,7,8,9,10+sha256:0,1,2,3,4,5,6,7,8,9,10", &ctx.pcr_selections);
+    res = pcr_parse_selections("sha1:0,1,2,3,4,5+sha256:0,1,2,3,4,5,6,7,8,9,10", &ctx.pcr_selections);
     if(!res)
         return TSS2_ESYS_RC_BAD_VALUE;
 
@@ -823,7 +825,7 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx) {
         return TSS2_ESYS_RC_BAD_VALUE;
       }
 
-      res = pcr_print(&ctx.pcr_selections, &ctx.pcrs); // BUG IN PRINTING THE PCRS!!
+      res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
       if(!res){
         fprintf(stderr, "Error while printing PCRS to stdout\n");
         return TSS2_ESYS_RC_BAD_VALUE;

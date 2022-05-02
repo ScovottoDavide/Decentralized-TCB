@@ -7,6 +7,8 @@
 #include <tss2/tss2_tpm2_types.h>
 #include <tss2/tss2_mu.h>
 
+#define ARRAY_LEN(x) sizeof(sizeof(x) / sizeof((x)[0]))
+
 #define BUFFER_SIZE(type, field) (sizeof((((type *)NULL)->field)))
 #define TPM2B_TYPE_INIT(type, field) { .size = BUFFER_SIZE(type, field), }
 
