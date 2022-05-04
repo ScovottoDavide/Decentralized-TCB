@@ -32,7 +32,7 @@ int main(int argc, char const* argv[])
 
   	if(RAND_bytes(buffer, 32)){
     	int i;
-    	buffer[32] = '\0';
+    	//buffer[32] = '\0';
     	for(i=0; buffer[i]!='\0'; i++)
       		printf("%02x", buffer[i]);
 		printf("\n");
