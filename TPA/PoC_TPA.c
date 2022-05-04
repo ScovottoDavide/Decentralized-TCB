@@ -10,6 +10,7 @@
 #include "tpm2_createak.h"
 #include "tpm2_quote.h"
 #include "PCR9Extend.h"
+#include "../IMA/ima_read_writeOut_binary.h"
 #define PORT 8080
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT* esys_context);
@@ -67,7 +68,7 @@ int main() {
       printf("Error in tpm2_createek\n");
       exit(-1);
     }
-  
+
     fprintf(stdout, "Generating AK...\n");
     tss_r = tpm2_createak(esys_context);
     if(tss_r != TSS2_RC_SUCCESS){
@@ -86,6 +87,9 @@ int main() {
     exit(-1);
   }
 
+  if(read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0){
+    fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
+  }
   return 0;
 }
 
