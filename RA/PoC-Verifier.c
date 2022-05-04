@@ -4,6 +4,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <openssl/rand.h>
+
+#include "tpm2_checkquote.h"
 #define PORT 8080
 
 int main(int argc, char const* argv[])
@@ -38,6 +40,10 @@ int main(int argc, char const* argv[])
 		printf("\n");
     	send(sock, buffer, strlen(buffer), 0);
   	}
+
+	sleep(2);
+
+	tpm2_checkquote();
 
 	return 0;
 }
