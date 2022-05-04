@@ -26,15 +26,16 @@ int main() {
   FILE *file_nonce;
 
   waitRARequest(nonce); // Receive request with nonce
-  file_nonce = fopen("/etc/tc/nonce_challange", "w");
+  file_nonce = fopen("/etc/tc/challenge", "w");
   if(!file_nonce){
     fprintf(stderr, "Could not create/open file\n");
     exit(-1);
   }
   fprintf(stdout, "Nonce received!");
-  for(i=0; nonce[i]!='\0'; i++)
-    fprintf(file_nonce, "%02x", nonce[i]);
-  fprintf(file_nonce, "\0", nonce[i]);
+  /*for(i=0; nonce[i]!='\0'; i++)
+    fprintf(file_nonce, "%02x", nonce[i]);*/
+  fwrite(nonce, 1, strlen(nonce), file_nonce);
+ 
   fclose(file_nonce);
 	printf("\n");
 
@@ -87,9 +88,10 @@ int main() {
     exit(-1);
   }
 
-  if(read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0){
+  /*if(read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0){
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
-  }
+  }*/
+  system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG");
   return 0;
 }
 
@@ -159,6 +161,4 @@ void waitRARequest(char *nonce){
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  nonce[32] = '\0';
-
 }

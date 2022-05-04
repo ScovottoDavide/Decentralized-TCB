@@ -195,21 +195,73 @@ bool pcr_parse_selections(const char *arg, TPML_PCR_SELECTION *pcr_select) {
     return true;
 }
 
+bool files_get_file_size(FILE *fp, unsigned long *file_size, const char *path) {
+
+    long current = ftell(fp);
+    if (current < 0) {
+        if (path) {
+            fprintf(stderr, "Error getting current file offset for file \"%s\"", path);
+        }
+        return false;
+    }
+
+    int rc = fseek(fp, 0, SEEK_END);
+    if (rc < 0) {
+        if (path) {
+            fprintf(stderr, "Error seeking to end of file \"%s\"", path);
+        }
+        return false;
+    }
+
+    long size = ftell(fp);
+    if (size < 0) {
+        if (path) {
+            fprintf(stderr, "ftell on file \"%s\" failed", path);
+        }
+        return false;
+    }
+
+    rc = fseek(fp, current, SEEK_SET);
+    if (rc < 0) {
+        if (path) {
+           fprintf(stderr, "Cannot restore initial seek position on file \"%s\"", path);
+        }
+        return false;
+    }
+
+    /* size cannot be negative at this point */
+    *file_size = (unsigned long) size;
+    return true;
+}
+
 bool read_nonce_from_file(const char *input, UINT16 *len, BYTE *buffer){
-    int read = 0;
     FILE *f = fopen(input, "rb");
     if(!f){
         fprintf(stderr, "Could not open %s file\n", input);
         return false;
     }
 
-    read = fread(buffer, *len, 1, f);
+    unsigned long file_size;
+    bool res = files_get_file_size(f, &file_size, input);
+    if(!res) return false;
 
-    if(read <= 0 || read > 1){
+    fprintf(stdout, "filesize: %d\n", file_size);
+    if(file_size > *len){
+        fprintf(stderr, "File size is greater than buffer capability\n");
+        return false;
+    }
+
+    *len = file_size;
+    size_t count = 0;
+    do{
+        count += fread(&buffer[count], 1, *len-count, f);
+    } while( count < *len && !feof(f));
+   
+    if(*len < file_size){
         fprintf(stderr, "Could not read any data from file!\n");
         return false;
     }
-    //fprintf(stdout, "%s\n", buffer);
+    //fprintf(stdout, "1: %s %d\n", buffer, strlen(buffer));
     fclose(f);
     return true;
 }
@@ -735,12 +787,12 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx) {
     ctx.key.auth_str = NULL;
 
     // parse ocr list --> sha1:0,1,2,3,4,5,6,7,8,9,10+sha256:0,1,2,3,4,5,6,7,8,9,10
-    res = pcr_parse_selections("sha1:0,1,2,3,4,5+sha256:0,1,2,3,4,5,6,7,8,9,10", &ctx.pcr_selections);
+    res = pcr_parse_selections("sha1:9,10+sha256:9,10", &ctx.pcr_selections);
     if(!res)
         return TSS2_ESYS_RC_BAD_VALUE;
 
     ctx.qualification_data.size = sizeof(ctx.qualification_data.buffer);
-    res = read_nonce_from_file("/etc/tc/nonce_challange", &ctx.qualification_data.size, ctx.qualification_data.buffer);
+    res = read_nonce_from_file("/etc/tc/challenge", &ctx.qualification_data.size, ctx.qualification_data.buffer);
     if(!res)
         return TSS2_ESYS_RC_BAD_VALUE;
 
