@@ -110,4 +110,4 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey);
 bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest);
 bool verify(void);
 
-TSS2_RC tpm2_checkquote();
+bool tpm2_checkquote();

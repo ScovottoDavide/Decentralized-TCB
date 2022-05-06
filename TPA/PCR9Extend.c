@@ -1,8 +1,5 @@
 #include "PCR9Extend.h"
 
-#define SHA1_LEN 20
-#define SHA256_LEN 32
-
 bool openAKPub(const char *path, unsigned char **akPub) {
 
   FILE *ak_pub = fopen(path, "r");
@@ -42,30 +39,6 @@ bool openAKPub(const char *path, unsigned char **akPub) {
 
   //printf("%s\n", *akPub);
   fclose (ak_pub);
-  return true;
-}
-
-bool computeDigest(unsigned char* akPub, const char* sha_alg, unsigned char **digest) {
-
-  size_t len = strlen(akPub);
-  unsigned char *local_digest;
-
-  if(!strcmp(sha_alg, "sha1")){
-    local_digest = calloc(0, SHA1_LEN*sizeof(char));
-    SHA1(akPub, len, local_digest);
-    *digest = calloc(0, SHA1_LEN*sizeof(char));
-    strncpy(*digest, local_digest, SHA1_LEN);
-  }
-  else if (!strcmp(sha_alg, "sha256")){
-    local_digest = calloc(0, SHA256_LEN*sizeof(char));
-    SHA256(akPub, len, local_digest);
-    *digest = calloc(0, (SHA256_LEN)*sizeof(char));
-    strncpy(*digest, local_digest, SHA256_LEN);
-  } else {
-    fprintf(stderr, "Algorithm %s not supported\n", sha_alg);
-    return false;
-  }
-
   return true;
 }
 
@@ -114,10 +87,12 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
       fprintf(stdout, "\n");
   }
   
-  
   ESYS_TR  pcrHandle_handle = 9;
-   TPML_DIGEST_VALUES digests;
+  TPML_DIGEST_VALUES digests;
   if(!strcmp(halg, "sha1")){
+    unsigned char *final_digest;
+    final_digest = malloc(SHA_DIGEST_LENGTH*sizeof(unsigned char));
+    memcpy(final_digest, digest, SHA_DIGEST_LENGTH);
     TPML_DIGEST_VALUES tmp = 
       {
         .count = 1,
@@ -125,21 +100,25 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
             {
                 .hashAlg = TPM2_ALG_SHA1,
                 .digest = {
-                    .sha1 = *digest
+                    .sha1 = *final_digest
                 }
             },
         }
       };
       digests = tmp;
   }else {
-  TPML_DIGEST_VALUES tmp = 
+    unsigned char *final_digest;
+    final_digest = malloc(SHA256_DIGEST_LENGTH*sizeof(unsigned char));
+    memcpy(final_digest, digest, SHA256_DIGEST_LENGTH);
+    final_digest[SHA256_DIGEST_LENGTH] = '\0';
+    TPML_DIGEST_VALUES tmp = 
       {
         .count = 1,
         .digests = {
             {
                 .hashAlg = TPM2_ALG_SHA256,
                 .digest = {
-                    .sha256 = *digest
+                    .sha256 = *final_digest
                 }
             },
         }

@@ -15,6 +15,7 @@
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT* esys_context);
 void waitRARequest(char *nonce);
+bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 
 int main() {
 
@@ -79,6 +80,11 @@ int main() {
 
     tpm2_getCap_handles_persistent(esys_context);
 
+  }
+  
+  if(pcr_check_if_zeros(esys_context)) {
+    // Extend both
+    ExtendPCR9(esys_context, "sha1");
     ExtendPCR9(esys_context, "sha256");
   }
 
@@ -91,7 +97,9 @@ int main() {
   /*if(read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0){
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }*/
-  system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG");
+
+  // this command modifies PCR10, so also the IMA LOG
+  //system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG");
   return 0;
 }
 
@@ -161,4 +169,71 @@ void waitRARequest(char *nonce){
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+}
+
+bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context){
+  UINT32 i;
+  size_t vi = 0;  /* value index */
+  UINT32 di = 0;  /* digest index */
+  u_int8_t pcr_max[SHA256_DIGEST_LENGTH];
+  TSS2_RC tss_r;
+
+  memset(pcr_max, 0, SHA256_DIGEST_LENGTH);	/* initial PCR9-sha256 (is the max) content 0..0 */
+
+  // Prepare TPML_PCR_SELECTION to read only PCR9 
+  // If PCR9 (sha1+sha256) are already extended, do NOT extend them more otherwise it's not possible to check its integrity
+  TPML_PCR_SELECTION pcr_select;
+  tpm2_pcrs pcrs;
+  bool res = pcr_parse_selections("sha1:9+sha256:9", &pcr_select);
+  if(!res)
+    return false;
+
+  tss_r = pcr_read_pcr_values(esys_context, &pcr_select, &pcrs);
+  if(tss_r != TSS2_RC_SUCCESS){
+    fprintf(stderr, "Error while reading PCRs from TPM\n");
+    return false;
+  }
+
+  // Go through all PCRs in each bank
+  for(i = 0; i < pcr_select.count; i++){
+    const char *alg_name;
+    if(pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1){
+      alg_name = malloc(strlen("sha1")*sizeof(char));
+      alg_name = "sha1";
+    } else if(pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256) {
+      alg_name = malloc(strlen("sha256")*sizeof(char));
+      alg_name = "sha256";
+    }
+
+    // Go through all PCRs in this banks
+    unsigned int pcr_id;
+    for(pcr_id = 0; pcr_id < pcr_select.pcrSelections[i].sizeofSelect * 8u; pcr_id++){
+      // skip unset pcrs (bit = 0)
+      if(!(pcr_select.pcrSelections[i].pcrSelect[((pcr_id) / 8)] & (1 << ((pcr_id) % 8)))){
+        continue;
+      }
+
+      if(vi >= pcrs.count || di >= pcrs.pcr_values[vi].count){
+        fprintf(stderr, "Trying to print but nothing more! di: %d, count: %d\n", di, pcrs.pcr_values[vi].count);
+        return false;
+      }
+
+      // Print current PRC content (digest value)
+      TPM2B_DIGEST *d = &pcrs.pcr_values[vi].digests[di];
+      if(pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1){
+        if(memcmp(d->buffer, pcr_max, SHA_DIGEST_LENGTH))
+          return false;
+      } else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256){
+        if(memcmp(d->buffer, pcr_max, SHA256_DIGEST_LENGTH))
+          return false;
+      }
+  
+      if(++di >= pcrs.pcr_values[vi].count){
+        di = 0;
+        ++vi;
+      }
+    }
+  }
+
+  return true;
 }

@@ -459,12 +459,10 @@ bool verify(void) {
 
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(pkey_ctx);
-
-    fprintf(stdout, "Quote successfully verified!!!!\n");
     return true;
 }
 
-TSS2_RC tpm2_checkquote() {
+bool tpm2_checkquote() {
     TSS2_RC tss_r = TSS2_RC_SUCCESS;
     bool res;
 
@@ -477,23 +475,23 @@ TSS2_RC tpm2_checkquote() {
 
     if (!(ctx.pubkey_file_path && ctx.msg_file_path && ctx.sig_file_path && ctx.pcr_file_path && ctx.nonce_file_path)) {
         fprintf(stderr, "Missing resources needed to validate the quote\n");
-        return TSS2_ESYS_RC_BAD_VALUE;
+        return false;
     }
 
     ctx.extra_data.size = sizeof(ctx.extra_data.buffer);
     res = read_nonce_from_file(ctx.nonce_file_path, &ctx.extra_data.size, ctx.extra_data.buffer);
     if(!res)
-        return TSS2_ESYS_RC_BAD_VALUE;
+        return false;
     
     TPM2B_ATTEST *msg = NULL;
     msg = message_from_file(ctx.msg_file_path);
-    if(!msg) return TSS2_ESYS_RC_BAD_VALUE;
+    if(!msg) return false;
 
     res = tpm2_load_signature_from_path(ctx.sig_file_path, &ctx.signature);
     if(!res){
         fprintf(stderr, "Error while loading signature\n");
         free(msg);
-        return TSS2_ESYS_RC_BAD_VALUE;
+        return false;
     }
 
     TPML_PCR_SELECTION pcr_select;
@@ -504,43 +502,38 @@ TSS2_RC tpm2_checkquote() {
         if(!pcrs_from_file(ctx.pcr_file_path, &pcr_select, &temp_pcrs)){
             // Internal error log
             free(msg);
-            return TSS2_ESYS_RC_BAD_VALUE;
+            return false;
         }
         pcrs = &temp_pcrs;
         if(le32toh(pcr_select.count) > TPM2_NUM_PCR_BANKS){
             free(msg);
-            return TSS2_ESYS_RC_BAD_VALUE;
+            return false;
         }
 
         if(!tpm2_openssl_hash_pcr_banks(ctx.halg, &pcr_select, pcrs, &ctx.pcr_hash)){
             fprintf(stderr, "Failed to compute PCR hash of its values. Needed for comparing this with real calcDigest inside the quote\n");
-            return TSS2_ESYS_RC_BAD_VALUE;
+            return false;
         }
 
         if(!pcr_print(&pcr_select, pcrs)){
             fprintf(stderr, "Failed to print PCRs \n");
-            return TSS2_ESYS_RC_BAD_VALUE;
+            return false;
         }
 
         tss_r = get_internal_attested_data(msg, &ctx.attest);
         if(tss_r != TSS2_RC_SUCCESS){
             fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
-            return TSS2_ESYS_RC_BAD_VALUE;
+            return false;
         }
 
         // Recompute the signature in order to compare it later with the one loaded in ctx.signature
         if(!tpm2_openssl_hash_compute_data(ctx.halg, msg->attestationData, msg->size, &ctx.msg_hash)){
             free(msg);
             fprintf(stderr, "Recomputation of quote signature failed!\n");
-            return TSS2_ESYS_RC_BAD_VALUE;
+            return false;
         }
         free(msg);
-
-        if(!verify()){
-            fprintf(stderr, "Error verifying quote\n");
-            return TSS2_ESYS_RC_BAD_VALUE;
-        }
     }
 
-    return TSS2_RC_SUCCESS;
+    return verify();
 }

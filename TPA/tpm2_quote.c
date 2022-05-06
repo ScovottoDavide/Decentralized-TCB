@@ -245,7 +245,6 @@ bool read_nonce_from_file(const char *input, UINT16 *len, BYTE *buffer){
     bool res = files_get_file_size(f, &file_size, input);
     if(!res) return false;
 
-    fprintf(stdout, "filesize: %d\n", file_size);
     if(file_size > *len){
         fprintf(stderr, "File size is greater than buffer capability\n");
         return false;
@@ -786,7 +785,7 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx) {
     ctx.key.ctx_path = "0x81000001";
     ctx.key.auth_str = NULL;
 
-    // parse ocr list --> sha1:0,1,2,3,4,5,6,7,8,9,10+sha256:0,1,2,3,4,5,6,7,8,9,10
+    // parse pcr list --> sha1:0,1,2,3,4,5,6,7,8,9,10+sha256:0,1,2,3,4,5,6,7,8,9,10
     res = pcr_parse_selections("sha1:9,10+sha256:9,10", &ctx.pcr_selections);
     if(!res)
         return TSS2_ESYS_RC_BAD_VALUE;
