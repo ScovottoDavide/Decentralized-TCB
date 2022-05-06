@@ -613,7 +613,7 @@ bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_diges
     return true;
 }
 
-TSS2_RC get_digest_from_quote(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest){
+TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest){
 
   size_t offset = 0;
   TSS2_RC res = Tss2_MU_TPMS_ATTEST_Unmarshal(quoted->attestationData, quoted->size, &offset, attest);
@@ -871,9 +871,9 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx) {
         return TSS2_ESYS_RC_BAD_VALUE;
       }
 
-      tss_r = get_digest_from_quote(ctx.quoted, &ctx.attest);
+      tss_r = get_internal_attested_data(ctx.quoted, &ctx.attest);
       if(tss_r != TSS2_RC_SUCCESS){
-        fprintf(stderr, "Error while trying to get digest from quote\n");
+        fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
         return TSS2_ESYS_RC_BAD_VALUE;
       }
 

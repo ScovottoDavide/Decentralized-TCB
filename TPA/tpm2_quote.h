@@ -53,7 +53,37 @@ bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size);
 bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file);
 static TSS2_RC write_output_files(void);
 
-TSS2_RC get_digest_from_quote(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest);
+// It's a "cast" from TPM2B_ATTEST to TPMS_ATTEST to get all the information related to the attested data 
+/*
+// Table 115 - TPMU_ATTEST Union
+ typedef union {
+   TPMS_CERTIFY_INFO       certify;
+   TPMS_CREATION_INFO      creation;
+   TPMS_QUOTE_INFO         quote;
+   TPMS_COMMAND_AUDIT_INFO commandAudit;
+   TPMS_SESSION_AUDIT_INFO sessionAudit;
+   TPMS_TIME_ATTEST_INFO   time;
+   TPMS_NV_CERTIFY_INFO    nv;
+ } TPMU_ATTEST;
+ 
+ // Table 116 - TPMS_ATTEST Structure
+ typedef struct {
+   TPM_GENERATED   magic;
+   TPMI_ST_ATTEST  type;
+   TPM2B_NAME      qualifiedSigner;
+   TPM2B_DATA      extraData;
+   TPMS_CLOCK_INFO clockInfo;
+   UINT64          firmwareVersion;
+   TPMU_ATTEST     attested;
+ } TPMS_ATTEST;
+ 
+ // Table 117 - TPM2B_ATTEST Structure
+ typedef struct {
+   UINT16 size;
+   BYTE   attestationData[sizeof(TPMS_ATTEST)];
+ } TPM2B_ATTEST;
+*/
+TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest);
 
 // tpm2_quote_internal in createak_util.h --> to fix dependencies!!!!!!!!!
 
