@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
 
 typedef struct tpm2_pcr_digest_spec tpm2_pcr_digest_spec;
 struct tpm2_pcr_digest_spec {
@@ -17,4 +18,6 @@ bool openAKPub(const char *path, unsigned char **akPub);
 bool computeDigest(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
 // Using OpenSSL higher APIs for computing the Digest
 int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
+
+int tpm2_util_hex_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer);
 TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg);

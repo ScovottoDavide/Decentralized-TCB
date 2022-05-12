@@ -1,4 +1,5 @@
 #include "PCR9Extend.h"
+#include "createak_util.h"
 
 typedef struct tpm_pcr_extend_ctx tpm_pcr_extend_ctx;
 struct tpm_pcr_extend_ctx {
@@ -55,13 +56,13 @@ int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **
   unsigned char md_value[EVP_MAX_MD_SIZE];
 
   OpenSSL_add_all_digests();
-  
+
   md = EVP_get_digestbyname(sha_alg);
   if (md == NULL) {
     printf("Unknown message digest %s\n", sha_alg);
     return false;
   }
- 
+
   mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, md, NULL);
   EVP_DigestUpdate(mdctx, akPub, strlen(akPub));
@@ -69,6 +70,33 @@ int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **
   EVP_MD_CTX_free(mdctx);
 
   return md_len;
+}
+
+int tpm2_util_hex_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer){
+   int str_length; //if the input_string likes "1a2b...", no prefix "0x"
+   int i = 0;
+   if (input_string == NULL || byte_length == NULL || byte_buffer == NULL)
+       return -1;
+   str_length = strlen(input_string);
+   if (str_length % 2)
+       return -2;
+   for (i = 0; i < str_length; i++) {
+       if (!isxdigit(input_string[i]))
+           return -3;
+   }
+
+   if (*byte_length < str_length / 2)
+       return -4;
+
+   *byte_length = str_length / 2;
+
+   for (i = 0; i < *byte_length; i++) {
+       char tmp_str[4] = { 0 };
+       tmp_str[0] = input_string[i * 2];
+       tmp_str[1] = input_string[i * 2 + 1];
+       byte_buffer[i] = strtol(tmp_str, NULL, 16);
+   }
+   return 0;
 }
 
 TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
@@ -84,59 +112,58 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
   if(md_len <= 0)
     return TSS2_ESYS_RC_BAD_VALUE;
 
-  fflush(stdout); fflush(stderr);
-  fprintf(stdout, "Digest AK (%s): ", halg);
-  int i;
-  for(i = 0; i<md_len; i++){
-    fprintf(stdout, "%x", digest[i]);
-    if(i==md_len - 1)
-      fprintf(stdout, "\n");
+  int loop = 0, i = 0;
+  char hex_digest[(md_len*2)+1];
+  for(loop=0; loop < md_len; loop++){
+    sprintf((char *)(hex_digest+i), "%02x", digest[loop]);
+    i+=2;
   }
-  
-  UINT32 pcrHandle_handle = 9;
+  hex_digest[i++] = '\0';
+
+  fprintf(stdout, "Digest AK (%s): %s\n", halg, hex_digest);
+
+  TPMI_DH_PCR pcr_index;
+  // get PCR id
+  tpm2_util_handle_from_optarg("9", &pcr_index, TPM2_HANDLE_FLAGS_PCR);
+
+  BYTE *digest_bytes;
+  UINT16 expected_hash_size = 0;
+  if(strcmp(halg, "sha1") == 0){
+    expected_hash_size = SHA_DIGEST_LENGTH;
+    digest_bytes = malloc(SHA_DIGEST_LENGTH*sizeof(BYTE));
+  }else if(strcmp(halg, "sha256") == 0){
+    expected_hash_size = SHA256_DIGEST_LENGTH;
+    digest_bytes = malloc(SHA256_DIGEST_LENGTH*sizeof(BYTE));
+  }
+
+  UINT16 size = expected_hash_size;
+  int rc = tpm2_util_hex_to_byte_structure(hex_digest, &size, digest_bytes);
+  if(rc){
+    fprintf(stderr, "Could not convert string in bytes %d\n", rc);
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
+
+  if (expected_hash_size != size) {
+      fprintf(stdout, "Algorithm \"%s\" expects a size of %u bytes, got: %u", halg, expected_hash_size, size);
+      return TSS2_ESYS_RC_BAD_VALUE;
+  }
+
   TPML_DIGEST_VALUES digests;
   if(!strcmp(halg, "sha1")){
-    BYTE *final_digest;
-    final_digest = malloc(SHA_DIGEST_LENGTH*sizeof(BYTE));
-    memcpy(final_digest, digest, SHA_DIGEST_LENGTH);
-    TPML_DIGEST_VALUES tmp = 
-      {
-        .count = 1,
-        .digests = {
-            {
-                .hashAlg = TPM2_ALG_SHA1,
-                .digest = {
-                    .sha1 = *digest
-                }
-            },
-        }
-      };
-      digests = tmp;
+    digests.count = 1;
+    digests.digests->hashAlg = TPM2_ALG_SHA1;
+    memcpy(digests.digests->digest.sha1, digest_bytes, size);
   }else {
-    BYTE *final_digest = (BYTE *) digest;
-    //final_digest = malloc(SHA256_DIGEST_LENGTH*sizeof(unsigned char));
-    //memcpy(final_digest, digest, SHA256_DIGEST_LENGTH);
-    TPML_DIGEST_VALUES tmp = 
-      {
-        .count = 1,
-        .digests = {
-            {
-                .hashAlg = TPM2_ALG_SHA256,
-                .digest = {
-                    .sha256 = *final_digest
-                }
-            },
-        }
-      };
-      digests = tmp;
+    digests.count = 1;
+    digests.digests->hashAlg = TPM2_ALG_SHA256;
+    memcpy(digests.digests->digest.sha256, digest_bytes, size);
   }
 
 
-  TSS2_RC tss_r = Esys_PCR_Extend(ectx, pcrHandle_handle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
+  TSS2_RC tss_r = Esys_PCR_Extend(ectx, pcr_index, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
   if(tss_r != TSS2_RC_SUCCESS){
-    fprintf(stderr, "Could not extend PCR:%d\n", pcrHandle_handle);
+    fprintf(stderr, "Could not extend PCR:%d\n", pcr_index);
     exit(-1);
   }
-
   return tss_r;
 }
