@@ -11,6 +11,7 @@
 bool pcr_get_pcr_9s(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
+int computePCRsoftBinding(unsigned char* pcr_concatenated, const char* sha_alg, unsigned char **digest, int size);
 bool PCR9_verification();
 
 int main(int argc, char const* argv[])
@@ -97,13 +98,13 @@ bool pcr_get_pcr_9s(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST
         if(pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1){
           if(!memcpy(pcr9_sha1->buffer, d->buffer, SHA_DIGEST_LENGTH))
             return false;
-        } 
+        }
         else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256){
           if(!memcpy(pcr9_sha256->buffer, d->buffer, SHA256_DIGEST_LENGTH))
             return false;
         }
       }
-  
+
       if(++di >= pcrs->pcr_values[vi].count){
         di = 0;
         ++vi;
@@ -160,19 +161,40 @@ int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **
   EVP_MD_CTX*mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
-  unsigned char md_value[EVP_MAX_MD_SIZE];
 
   OpenSSL_add_all_digests();
-  
+
   md = EVP_get_digestbyname(sha_alg);
   if (md == NULL) {
     printf("Unknown message digest %s\n", sha_alg);
     return false;
   }
-	
+
   mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, md, NULL);
   EVP_DigestUpdate(mdctx, akPub, strlen(akPub));
+  EVP_DigestFinal_ex(mdctx, *digest, &md_len);
+  EVP_MD_CTX_free(mdctx);
+
+  return md_len;
+}
+
+int computePCRsoftBinding(unsigned char* pcr_concatenated, const char* sha_alg, unsigned char **digest, int size){
+  EVP_MD_CTX*mdctx;
+  const EVP_MD *md;
+  unsigned int md_len, i;
+
+  OpenSSL_add_all_digests();
+
+  md = EVP_get_digestbyname(sha_alg);
+  if (md == NULL) {
+    printf("Unknown message digest %s\n", sha_alg);
+    return false;
+  }
+
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, md, NULL);
+	EVP_DigestUpdate(mdctx, pcr_concatenated, size);
   EVP_DigestFinal_ex(mdctx, *digest, &md_len);
   EVP_MD_CTX_free(mdctx);
 
@@ -203,64 +225,71 @@ bool PCR9_verification() {
 	}
 
 	unsigned char *akPub = NULL;
- 	unsigned char *digest = NULL;
-	unsigned char *digest2 = NULL;
+ 	unsigned char *digest_sha1 = NULL;
+	unsigned char *digest_sha256 = NULL;
 	if(!openAKPub("/etc/tc/ak.pub.pem", &akPub)){
 		fprintf(stderr, "Could not read AK pub\n");
 		return false;
 	}
 
-	digest = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
-	digest2 = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
-	int md_len = computeDigestEVP(akPub, "sha1", &digest);
-  if(md_len <= 0)
+	digest_sha1 = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
+	digest_sha256 = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
+	int md_len_sha1 = computeDigestEVP(akPub, "sha1", &digest_sha1);
+  if(md_len_sha1 <= 0)
     return false;
-	int md_len2 = computeDigestEVP(akPub, "sha256", &digest2);
-  if(md_len2 <= 0)
+	int md_len_sha256 = computeDigestEVP(akPub, "sha256", &digest_sha256);
+  if(md_len_sha256 <= 0)
     return false;
 
-  u_int8_t pcr_max[SHA256_DIGEST_LENGTH*2];
-  memset(pcr_max, 0, SHA256_DIGEST_LENGTH*2);	/* initial PCR9-sha256 (is the max) content 0..0 */
-	
   unsigned char *expected_PCR9sha1 = NULL;
   unsigned char *expected_PCR9sha256 = NULL;
 
-	/*for(i = 0; i < md_len; i++)
-		digest[i] |= pcr_max[i];
-  expected_PCR9sha1 = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
-  md_len = computeDigestEVP(digest, "sha1", &expected_PCR9sha1);
-  if(md_len <= 0)
-    return false;
-  
-  for(i = 0; i < md_len2; i++)
-		digest2[i] |= pcr_max[i];
-  expected_PCR9sha256 = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
-  md_len2 = computeDigestEVP(digest2, "sha256", &expected_PCR9sha256);
-  if(md_len2 <= 0)
-    return false;*/
+	u_int8_t *pcr_sha1;
+	pcr_sha1 = calloc((SHA_DIGEST_LENGTH*2+1), sizeof(u_int8_t));
+	int k=SHA_DIGEST_LENGTH;
+	for(i = 0; i < md_len_sha1; i++)
+	  pcr_sha1[k++] = (u_int8_t) digest_sha1[i];
+	pcr_sha1[SHA_DIGEST_LENGTH*2] = '\0';
+	expected_PCR9sha1 = malloc((SHA_DIGEST_LENGTH+1)*sizeof(unsigned char));
+	md_len_sha1 = computePCRsoftBinding(pcr_sha1, "sha1", &expected_PCR9sha1, SHA_DIGEST_LENGTH*2);
+	if(md_len_sha1 <= 0)
+	  return false;
 
-  expected_PCR9sha256 = calloc(0, (SHA256_DIGEST_LENGTH)*sizeof(unsigned char)*2);
-  int k=0;
-  for(i = SHA256_DIGEST_LENGTH; i < SHA256_DIGEST_LENGTH*2; i++) 
-    pcr_max[i] = digest2[k++];
-  for(i = 0; i < SHA256_DIGEST_LENGTH*2; i++) 
-    fprintf(stdout, "%02X", pcr_max[i]);
-  fprintf(stdout, "\n");
+	fprintf(stdout, "expected_PCR9sha1 : ");
+	for(i = 0; i < md_len_sha1; i++)
+		fprintf(stdout, "%02x", expected_PCR9sha1[i]);
+	fprintf(stdout, "\n");
+
+	if(memcmp(expected_PCR9sha1, pcr9_sha1.buffer, pcr9_sha1.size))
+		return false;
+
+	free(pcr_sha1);
+	free(digest_sha1);
+	free(expected_PCR9sha1);
+
+	u_int8_t *pcr_sha256;
+	pcr_sha256 = calloc(SHA256_DIGEST_LENGTH*2+1, sizeof(u_int8_t));
+	k=SHA256_DIGEST_LENGTH;
+  for(i = 0; i < md_len_sha256; i++)
+    pcr_sha256[k++] = digest_sha256[i];
+	pcr_sha256[SHA256_DIGEST_LENGTH*2] = '\0';
   expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH)*sizeof(unsigned char));
-  md_len2 = computeDigestEVP(pcr_max, "sha256", &expected_PCR9sha256);
-  if(md_len2 <= 0)
+  md_len_sha256 = computePCRsoftBinding(pcr_sha256, "sha256", &expected_PCR9sha256, SHA256_DIGEST_LENGTH*2);
+  if(md_len_sha256 <= 0)
     return false;
-   for(i = 0; i < SHA256_DIGEST_LENGTH; i++) 
+
+	fprintf(stdout, "expected_PCR9sha256 : ");
+  for(i = 0; i < md_len_sha256; i++)
     fprintf(stdout, "%02X", expected_PCR9sha256[i]);
   fprintf(stdout, "\n");
 
-  /*for(i = 0; i < md_len; i++) 
-    fprintf(stdout, "%02x", expected_PCR9sha1[i]);
-  fprintf(stdout, "\n");*/
-  
+	if(memcmp(expected_PCR9sha256, pcr9_sha256.buffer, pcr9_sha256.size))
+		return false;
 
-	/*if(memcmp(expected_PCR9sha1, pcr9_sha1.buffer, pcr9_sha1.size) || memcmp(expected_PCR9sha256, pcr9_sha256.buffer, pcr9_sha256.size))
-		return false;*/
+	free(pcr_sha256);
+	free(digest_sha256);
+	free(expected_PCR9sha256);
 
+	free(akPub);
 	return true;
 }

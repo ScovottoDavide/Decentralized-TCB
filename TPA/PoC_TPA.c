@@ -33,10 +33,9 @@ int main() {
     exit(-1);
   }
   fprintf(stdout, "Nonce received!");
-  /*for(i=0; nonce[i]!='\0'; i++)
-    fprintf(file_nonce, "%02x", nonce[i]);*/
+
   fwrite(nonce, 1, strlen(nonce), file_nonce);
- 
+
   fclose(file_nonce);
 	printf("\n");
 
@@ -81,12 +80,12 @@ int main() {
     tpm2_getCap_handles_persistent(esys_context);
 
   }
-  
-  //if(pcr_check_if_zeros(esys_context)) {
+
+  if(pcr_check_if_zeros(esys_context)) {
     // Extend both
     ExtendPCR9(esys_context, "sha1");
     ExtendPCR9(esys_context, "sha256");
-  //}
+  }
 
   tss_r = tpm2_quote(esys_context);
   if(tss_r != TSS2_RC_SUCCESS){
@@ -180,7 +179,7 @@ bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context){
 
   memset(pcr_max, 0, SHA256_DIGEST_LENGTH);	/* initial PCR9-sha256 (is the max) content 0..0 */
 
-  // Prepare TPML_PCR_SELECTION to read only PCR9 
+  // Prepare TPML_PCR_SELECTION to read only PCR9
   // If PCR9 (sha1+sha256) are already extended, do NOT extend them more otherwise it's not possible to check its integrity
   TPML_PCR_SELECTION pcr_select;
   tpm2_pcrs pcrs;
@@ -227,7 +226,7 @@ bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context){
         if(memcmp(d->buffer, pcr_max, SHA256_DIGEST_LENGTH))
           return false;
       }
-  
+
       if(++di >= pcrs.pcr_values[vi].count){
         di = 0;
         ++vi;
