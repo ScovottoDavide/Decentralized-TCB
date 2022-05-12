@@ -6,6 +6,12 @@
 #include <stdbool.h>
 #include <string.h>
 
+typedef struct tpm2_pcr_digest_spec tpm2_pcr_digest_spec;
+struct tpm2_pcr_digest_spec {
+    TPML_DIGEST_VALUES digests;
+    TPMI_DH_PCR pcr_index;
+};
+
 bool openAKPub(const char *path, unsigned char **akPub);
 // Using OpenSSL direct APIs for computing the Digest --> NOT RECOMMENDED!!
 bool computeDigest(unsigned char* akPub, const char* sha_alg, unsigned char **digest);

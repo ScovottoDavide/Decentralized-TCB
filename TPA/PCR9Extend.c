@@ -1,5 +1,11 @@
 #include "PCR9Extend.h"
 
+typedef struct tpm_pcr_extend_ctx tpm_pcr_extend_ctx;
+struct tpm_pcr_extend_ctx {
+    size_t digest_spec_len;
+    tpm2_pcr_digest_spec *digest_spec;
+};
+
 bool openAKPub(const char *path, unsigned char **akPub) {
 
   FILE *ak_pub = fopen(path, "r");
@@ -82,16 +88,16 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
   fprintf(stdout, "Digest AK (%s): ", halg);
   int i;
   for(i = 0; i<md_len; i++){
-    fprintf(stdout, "%02x", digest[i]);
+    fprintf(stdout, "%x", digest[i]);
     if(i==md_len - 1)
       fprintf(stdout, "\n");
   }
   
-  ESYS_TR  pcrHandle_handle = 9;
+  UINT32 pcrHandle_handle = 9;
   TPML_DIGEST_VALUES digests;
   if(!strcmp(halg, "sha1")){
-    unsigned char *final_digest;
-    final_digest = malloc(SHA_DIGEST_LENGTH*sizeof(unsigned char));
+    BYTE *final_digest;
+    final_digest = malloc(SHA_DIGEST_LENGTH*sizeof(BYTE));
     memcpy(final_digest, digest, SHA_DIGEST_LENGTH);
     TPML_DIGEST_VALUES tmp = 
       {
@@ -100,17 +106,16 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
             {
                 .hashAlg = TPM2_ALG_SHA1,
                 .digest = {
-                    .sha1 = *final_digest
+                    .sha1 = *digest
                 }
             },
         }
       };
       digests = tmp;
   }else {
-    unsigned char *final_digest;
-    final_digest = malloc(SHA256_DIGEST_LENGTH*sizeof(unsigned char));
-    memcpy(final_digest, digest, SHA256_DIGEST_LENGTH);
-    final_digest[SHA256_DIGEST_LENGTH] = '\0';
+    BYTE *final_digest = (BYTE *) digest;
+    //final_digest = malloc(SHA256_DIGEST_LENGTH*sizeof(unsigned char));
+    //memcpy(final_digest, digest, SHA256_DIGEST_LENGTH);
     TPML_DIGEST_VALUES tmp = 
       {
         .count = 1,
@@ -125,7 +130,7 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
       };
       digests = tmp;
   }
-  
+
 
   TSS2_RC tss_r = Esys_PCR_Extend(ectx, pcrHandle_handle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
   if(tss_r != TSS2_RC_SUCCESS){

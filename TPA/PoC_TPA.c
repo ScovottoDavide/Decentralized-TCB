@@ -82,11 +82,11 @@ int main() {
 
   }
   
-  if(pcr_check_if_zeros(esys_context)) {
+  //if(pcr_check_if_zeros(esys_context)) {
     // Extend both
     ExtendPCR9(esys_context, "sha1");
     ExtendPCR9(esys_context, "sha256");
-  }
+  //}
 
   tss_r = tpm2_quote(esys_context);
   if(tss_r != TSS2_RC_SUCCESS){
