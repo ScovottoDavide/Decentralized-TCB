@@ -93,7 +93,7 @@ int main() {
     exit(-1);
   }
 
-  if(read_write_IMAb("/home/pavide/IMA") != 0){
+  if(read_write_IMAb("/home/pi/IMA") != 0){
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }
 

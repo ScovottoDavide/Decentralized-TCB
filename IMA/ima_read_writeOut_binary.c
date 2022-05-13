@@ -42,8 +42,7 @@ static int read_template_data(struct event *template, FILE *fp, FILE *fout) {
 
 	if (!is_ima_template) {
 		fread(&template->template_data_len, sizeof(u_int32_t), 1, fp);
-		//fprintf(stdout, " 0x%02x ", template->template_data_len);
-    fwrite(&template->template_data_len, sizeof(u_int32_t), 1, fout);
+    	fwrite(&template->template_data_len, sizeof(u_int32_t), 1, fout);
 		len = template->template_data_len;
 	} else {
 		template->template_data_len = SHA_DIGEST_LENGTH +
@@ -55,8 +54,7 @@ static int read_template_data(struct event *template, FILE *fp, FILE *fout) {
 		len = SHA_DIGEST_LENGTH;
 	}
 
-	template->template_data = calloc(template->template_data_len,
-					 sizeof(u_int8_t));
+	template->template_data = calloc(template->template_data_len, sizeof(u_int8_t));
 	if (template->template_data == NULL) {
 		printf("ERROR: out of memory\n");
 		return -ENOMEM;
@@ -69,80 +67,74 @@ static int read_template_data(struct event *template, FILE *fp, FILE *fout) {
 		fread(&field_len, sizeof(u_int32_t), 1, fp);
 		fread(template->template_data + SHA_DIGEST_LENGTH,field_len, 1, fp);
 	}else if (is_imang_template){ /* finish 'ima-ng' template data read */
-			u_int32_t field_len;
-			u_int32_t field_path_len;
-			u_int8_t alg_field[8]; /* sha256:\0 */
-			u_int8_t *path_field;
+		u_int32_t field_len;
+		u_int32_t field_path_len;
+		u_int8_t alg_field[8]; /* sha256:\0 */
+		u_int8_t alg_sha1_field[6]; /* sha1:\0 */
+		u_int8_t *path_field;
 
-			fread(&field_len, sizeof(u_int32_t), 1, fp); /* d-ng:[uint32 little endian hash len]* */
-			//fprintf(stdout, " 0x%02x ", field_len);
-      fwrite(&field_len, sizeof(u_int32_t), 1, fout);
+		fread(&field_len, sizeof(u_int32_t), 1, fp); /* d-ng:[uint32 little endian hash len]* */
+      	fwrite(&field_len, sizeof(u_int32_t), 1, fout);
+		if(field_len != 0x28) {
+			fread(alg_sha1_field, sizeof(u_int8_t) , 6, fp);
+      		fwrite(alg_sha1_field, sizeof(u_int8_t) , 6, fout);
+	
+			fread(template->template_data, sizeof(u_int8_t), SHA_DIGEST_LENGTH, fp); /* [file hash] */
+			fwrite(template->template_data, sizeof(u_int8_t), SHA_DIGEST_LENGTH, fout);
+		} else {
 			fread(alg_field, sizeof(u_int8_t) , 8, fp);
-      fwrite(alg_field, sizeof(u_int8_t) , 8, fout);
-
-			/*for(i=0; i<8; i++)
-				fprintf(stdout, "%c", alg_field[i]);
-			fprintf(stdout, "\n");*/
+      		fwrite(alg_field, sizeof(u_int8_t) , 8, fout);
+			
 			fread(template->template_data, sizeof(u_int8_t), SHA256_DIGEST_LENGTH, fp); /* [file hash] */
 			fwrite(template->template_data, sizeof(u_int8_t), SHA256_DIGEST_LENGTH, fout);
+		}
 
-			/*for(i=0; i<SHA256_DIGEST_LENGTH; i++)
-				fprintf(stdout, " %02x", template->template_data[i]);*/
-			fread(&field_path_len, sizeof field_path_len, 1, fp); /* n-ng:[uint32 little endian path len] */
-      fwrite(&field_path_len, sizeof field_path_len, 1, fout);
-			//fprintf(stdout, " %02x ", field_path_len);
-			path_field = malloc(field_path_len*sizeof(u_int8_t));
-			fread(path_field, sizeof(u_int8_t), field_path_len, fp); /* [file hash] */
-			fwrite(path_field, sizeof(u_int8_t), field_path_len, fout);
-				for(i=0; i<field_path_len; i++)
-					fprintf(stdout, "%c", path_field[i]);
-				fprintf(stdout, "\n");
+		
+		fread(&field_path_len, sizeof field_path_len, 1, fp); /* n-ng:[uint32 little endian path len] */
+      	fwrite(&field_path_len, sizeof field_path_len, 1, fout);
+	
+		path_field = malloc(field_path_len*sizeof(u_int8_t));
 
-
+		fread(path_field, sizeof(u_int8_t), field_path_len, fp); /* [file hash] */
+		fwrite(path_field, sizeof(u_int8_t), field_path_len, fout);
+		
 	}
 	return 0;
 }
 
 int read_write_IMAb(const char *path){
-  FILE *fp;
-  struct event template;
+	FILE *fp;
+  	struct event template;
 
-  fp = fopen(path, "rb");
+  	fp = fopen(path, "rb");
 	if (!fp) {
 		printf("fn: %s\n", path);
 		perror("Unable to open file\n");
 		return -1;
 	}
 
-  FILE *fout;
-  fout = fopen("/etc/tc/IMA_LOG_OUT", "w");
-  if(!fout){
-    perror("Unable to create file\n");
-    return -1;
-  }
+ 	 FILE *fout;
+  	fout = fopen("/etc/tc/IMA_LOG_OUT", "w");
+  	if(!fout){
+    	perror("Unable to create file\n");
+    	return -1;
+  	}
 
-  while(fread(&template.header, sizeof template.header, 1, fp)){
-    //fprintf(stdout, "%03x %03x ", template.header.pcr, template.header.name_len);
-    //display_digest(template.header.digest, SHA_DIGEST_LENGTH, fout);
-		if(template.header.pcr!=0x0a){
+  	while(fread(&template.header, sizeof template.header, 1, fp)){
+    	//fprintf(stdout, "%03x %03x ", template.header.pcr, template.header.name_len);
+    	//display_digest(template.header.digest, SHA_DIGEST_LENGTH, fout);
+    	if (template.header.name_len > TCG_EVENT_NAME_LEN_MAX) {
+			printf("%d ERROR: event name too long!\n", template.header.name_len);
 			fclose(fp);
-      fclose(fout);
-			return 0;
-		}
-    if (template.header.name_len > TCG_EVENT_NAME_LEN_MAX) {
-			printf("%d ERROR: event name too long!\n",
-				template.header.name_len);
-			fclose(fp);
-      fclose(fout);
+      		fclose(fout);
 			exit(-1);
 		}
-    fwrite(&template.header.pcr, sizeof(u_int32_t), 1, fout);
+    	fwrite(&template.header.pcr, sizeof(u_int32_t), 1, fout);
 		fwrite(&template.header.digest, SHA_DIGEST_LENGTH*sizeof(u_int8_t), 1, fout);
 		fwrite(&template.header.name_len, sizeof(u_int32_t), 1, fout);
-    memset(template.name, 0, sizeof template.name);
-    fread(template.name, template.header.name_len, 1, fp);
-    fwrite(&template.name, template.header.name_len*sizeof(char), 1, fout);
-    //fprintf(fout, " %s", template.name);
+    	memset(template.name, 0, sizeof template.name);
+    	fread(template.name, template.header.name_len, 1, fp);
+    	fwrite(&template.name, template.header.name_len*sizeof(char), 1, fout);
 
 		if (read_template_data(&template, fp, fout) < 0) {
 			printf("\nReading of measurement entry failed\n");
@@ -150,15 +142,7 @@ int read_write_IMAb(const char *path){
 		}
 	}
 
-  /*const char eof = EOF;
-  fwrite(&eof, sizeof(char), 1, fout);*/
-
-  fclose(fp);
-  fclose(fout);
-  return 0;
-}
-
-/*int main(){
-  read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements");
-  return 0;
-}*/
+  	fclose(fp);
+  	fclose(fout);
+  	return 0;
+  }

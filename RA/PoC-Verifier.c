@@ -16,7 +16,7 @@ bool PCR9_verification();
 
 int main(int argc, char const* argv[])
 {
-	int sock = 0, valread;
+	int sock = 0, valread, i;
 	struct sockaddr_in serv_addr;
 	unsigned char buffer[32] = { 0 };
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -38,16 +38,23 @@ int main(int argc, char const* argv[])
 		return -1;
 	}
 
-  	if(RAND_bytes(buffer, 32)){
+retry:
+
+  if(!RAND_bytes(buffer, 32)){
+    return -1;
+  }
+  if(strlen(buffer) == 31){
     	int i;
     	//buffer[32] = '\0';
     	for(i=0; buffer[i]!='\0'; i++)
       		printf("%02x", buffer[i]);
 		printf("\n");
     	send(sock, buffer, strlen(buffer), 0);
-  	}
+  } else {
+    goto retry;
+  }
 
-	sleep(6);
+	sleep(3);
 
 	if(!tpm2_checkquote()){
 		fprintf(stderr, "Error while verifying quote!\n");
@@ -260,7 +267,7 @@ bool PCR9_verification() {
 		fprintf(stdout, "%02x", expected_PCR9sha1[i]);
 	fprintf(stdout, "\n");
 
-	if(memcmp(expected_PCR9sha1, pcr9_sha1.buffer, pcr9_sha1.size))
+	if(strncmp(expected_PCR9sha1, pcr9_sha1.buffer, pcr9_sha1.size))
 		return false;
 
 	free(pcr_sha1);
@@ -283,7 +290,7 @@ bool PCR9_verification() {
     fprintf(stdout, "%02X", expected_PCR9sha256[i]);
   fprintf(stdout, "\n");
 
-	if(memcmp(expected_PCR9sha256, pcr9_sha256.buffer, pcr9_sha256.size))
+	if(strncmp(expected_PCR9sha256, pcr9_sha256.buffer, pcr9_sha256.size))
 		return false;
 
 	free(pcr_sha256);
