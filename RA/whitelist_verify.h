@@ -1,15 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
+#include <stdbool.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
 
 #define TCG_EVENT_NAME_LEN_MAX	255
+#define DIGEST_LEN 32
 
 struct event {
 	struct {
@@ -23,6 +21,9 @@ struct event {
 	u_int8_t *template_data;	/* template related data */
 };
 
-static int display_digest(u_int8_t * digest, u_int32_t digestlen, FILE *fout);
-static int read_template_data(struct event *template, FILE *fp, FILE *fout);
-int read_write_IMAb(const char *path);
+struct whitelist_entry {
+    u_int8_t digest[DIGEST_LEN];
+    char *path;
+};
+
+int verify();
