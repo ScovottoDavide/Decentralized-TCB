@@ -93,9 +93,9 @@ int main() {
     exit(-1);
   }
 
-  /*if(read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0){
+  if(read_write_IMAb("/home/pavide/IMA") != 0){
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
-  }*/
+  }
 
   // this command modifies PCR10, so also the IMA LOG
   //system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG");

@@ -23,6 +23,7 @@ struct event {
 	u_int8_t *template_data;	/* template related data */
 };
 
+int swap_Endians(u_int32_t value);
 static int display_digest(u_int8_t * digest, u_int32_t digestlen, FILE *fout);
 static int read_template_data(struct event *template, FILE *fp, FILE *fout);
 int read_write_IMAb(const char *path);

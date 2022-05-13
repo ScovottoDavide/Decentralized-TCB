@@ -47,7 +47,7 @@ int main(int argc, char const* argv[])
     	send(sock, buffer, strlen(buffer), 0);
   	}
 
-	sleep(2);
+	sleep(6);
 
 	if(!tpm2_checkquote()){
 		fprintf(stderr, "Error while verifying quote!\n");
