@@ -7,7 +7,7 @@
 #include <openssl/evp.h>
 
 #define TCG_EVENT_NAME_LEN_MAX	255
-#define DIGEST_LEN 32
+#define DIGEST_LEN 64
 
 struct event {
 	struct {
@@ -22,8 +22,9 @@ struct event {
 };
 
 struct whitelist_entry {
-    u_int8_t digest[DIGEST_LEN];
+    u_int8_t digest[DIGEST_LEN+1];
     char *path;
 };
 
+static int read_template_data(struct event *template, FILE *fp, const struct whitelist_entry *white_entries, int white_entries_size);
 int verify();
