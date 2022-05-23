@@ -6,13 +6,14 @@
 #include <openssl/rand.h>
 
 #include "tpm2_checkquote.h"
+#include "whitelist_verify.h"
 #define PORT 8080
 
-bool pcr_get_pcr_9s(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256);
+bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char* pcr_concatenated, const char* sha_alg, unsigned char **digest, int size);
-bool PCR9_verification();
+bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256);
 
 int main(int argc, char const* argv[])
 {
@@ -62,16 +63,21 @@ retry:
 	}
 	fprintf(stdout, "Quote successfully verified!!!!\n");
 
-	if(!PCR9_verification()){
+  TPM2B_DIGEST pcr10_sha256, pcr10_sha1;
+  // Get also pcr10 since we're reading pcrs here 
+	if(!PCR9_verification(&pcr10_sha1, &pcr10_sha256)){
 		fprintf(stderr, "PCR9 verification failed\n");
 		exit(-1);
 	}
   fprintf(stdout, "PCR9 verfication successfull!!!!\n");
 
+  // PCR10 verification in whitelist verify
+  verify_PCR10_whitelist(pcr10_sha1.buffer, pcr10_sha256.buffer);
+
 	return 0;
 }
 
-bool pcr_get_pcr_9s(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256) {
+bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id) {
   UINT32 i;
   size_t vi = 0;  /* value index */
   UINT32 di = 0;  /* digest index */
@@ -100,7 +106,7 @@ bool pcr_get_pcr_9s(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST
         return false;
       }
 
-      if(pcr_id == 9){
+      if(pcr_id == id){
         TPM2B_DIGEST *d = &pcrs->pcr_values[vi].digests[di];
         if(pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1){
           if(!memcpy(pcr9_sha1->buffer, d->buffer, SHA_DIGEST_LENGTH))
@@ -208,7 +214,7 @@ int computePCRsoftBinding(unsigned char* pcr_concatenated, const char* sha_alg, 
   return md_len;
 }
 
-bool PCR9_verification() {
+bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256) {
 	TPML_PCR_SELECTION pcr_select;
   tpm2_pcrs *pcrs;
   tpm2_pcrs temp_pcrs = {};
@@ -226,10 +232,16 @@ bool PCR9_verification() {
         return false;
     }
 
-	if(!pcr_get_pcr_9s(pcr_select, pcrs, &pcr9_sha1, &pcr9_sha256)){
+	if(!pcr_get_pcr_byId(pcr_select, pcrs, &pcr9_sha1, &pcr9_sha256, 9)){
 		fprintf(stderr, "Could not retrieve pcr9s for verification of AK soft binding\n");
 		return false;
 	}
+
+ 	if(!pcr_get_pcr_byId(pcr_select, pcrs, pcr10_sha1, pcr10_sha256, 10)){
+		fprintf(stderr, "Could not retrieve PCR10\n");
+		return false;
+	}
+
 
 	unsigned char *akPub = NULL;
  	unsigned char *digest_sha1 = NULL;
@@ -277,8 +289,10 @@ bool PCR9_verification() {
 	u_int8_t *pcr_sha256;
 	pcr_sha256 = calloc(SHA256_DIGEST_LENGTH*2+1, sizeof(u_int8_t));
 	k=SHA256_DIGEST_LENGTH;
-  for(i = 0; i < md_len_sha256; i++)
+  for(i = 0; i < md_len_sha256; i++){
     pcr_sha256[k++] = digest_sha256[i];
+  }
+    
 	pcr_sha256[SHA256_DIGEST_LENGTH*2] = '\0';
   expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH)*sizeof(unsigned char));
   md_len_sha256 = computePCRsoftBinding(pcr_sha256, "sha256", &expected_PCR9sha256, SHA256_DIGEST_LENGTH*2);

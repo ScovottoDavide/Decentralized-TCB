@@ -1,0 +1,4 @@
+3
+909888bb50845e492d3f5a3e3d0b8048633d8076c58e6c16c425a49ee402d8e4 38 /home/pi/PoC-RemoteAttestation/TPA/TPA
+ba8d68d36956bf5489709dda2760ceca46c84dae69a01e4c9f930cecb99d8d98 42 /home/pi/PoC-RemoteAttestation/RA/Verifier
+ba4c4a256f7a6f084093e8981f9f0dfc2e49c8d232086707b39822c2b3a17be7 13 /usr/bin/tss2

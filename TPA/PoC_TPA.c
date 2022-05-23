@@ -87,18 +87,27 @@ int main() {
     ExtendPCR9(esys_context, "sha256");
   }
 
+  system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG_OUT");
+
   tss_r = tpm2_quote(esys_context);
   if(tss_r != TSS2_RC_SUCCESS){
     printf("Error while computing quote!\n");
     exit(-1);
   }
 
-  /*if(read_write_IMAb("/home/pavide/IMA") != 0){
+  /*if(read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0){
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }*/
 
   // this command modifies PCR10, so also the IMA LOG
-  system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG_OUT");
+  //system("sudo cat /etc/tc/quote.out >> /dev/null");
+  //system("sudo cat /etc/tc/challenge >> /dev/null");
+  //system("sudo cat /etc/tc/sig.out >> /dev/null");
+  //system("sudo cat /etc/tc/pcrs.out >> /dev/null");
+  //system("sudo cat /etc/tc/ak.pub.pem >> /dev/null");
+  //system("sudo cat /etc/tc/ek.pub.pem >> /dev/null");
+  //system("tss2 >> /dev/null");
+  //system("sudo cat /sys/kernel/security/integrity/ima/binary_runtime_measurements > /etc/tc/IMA_LOG_OUT");
   return 0;
 }
 

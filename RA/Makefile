@@ -6,7 +6,7 @@ CC = gcc
 LIBS = -ltss2-esys -ltss2-tctildr -ltss2-mu -lssl -lcrypto
 
 # define the C source files
-SRCS = PoC-Verifier.c tpm2_checkquote.c
+SRCS = PoC-Verifier.c tpm2_checkquote.c whitelist_verify.c
 
 # define rule for gcc
 TARGET = PoC-Verifier.c
