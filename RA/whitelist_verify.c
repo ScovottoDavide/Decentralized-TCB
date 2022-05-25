@@ -1,5 +1,29 @@
 #include "whitelist_verify.h"
 
+int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned char **digest, int size)
+{
+  EVP_MD_CTX *mdctx;
+  const EVP_MD *md;
+  unsigned int md_len, i;
+
+  OpenSSL_add_all_digests();
+
+  md = EVP_get_digestbyname(sha_alg);
+  if (md == NULL)
+  {
+    printf("Unknown message digest %s\n", sha_alg);
+    return false;
+  }
+
+  mdctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(mdctx, md, NULL);
+  EVP_DigestUpdate(mdctx, template, size);
+  EVP_DigestFinal_ex(mdctx, *digest, &md_len);
+  EVP_MD_CTX_free(mdctx);
+
+  return md_len;
+}
+
 int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size)
 {
   EVP_MD_CTX *mdctx;
@@ -14,7 +38,7 @@ int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsig
     printf("Unknown message digest %s\n", sha_alg);
     return false;
   }
- 
+
   mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, md, NULL);
   EVP_DigestUpdate(mdctx, pcr_concatenated, size);
@@ -53,17 +77,21 @@ int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, co
   return -1;
 }
 
-static int read_template_data(struct event *template, FILE *fp, const struct whitelist_entry *white_entries, int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH*+1])
+static int read_template_data(struct event *template, FILE *fp, const struct whitelist_entry *white_entries, int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH * +1])
 {
   int len, is_ima_template, is_imang_template, i, k = 0;
-  u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH*2 + 1, sizeof(u_int8_t));
+  u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
+
+  u_int8_t *entry_aggregate; 
+  u_int8_t *currentTemplateMD = calloc(SHA256_DIGEST_LENGTH, sizeof(u_int8_t));
+  u_int8_t acc = 0;
 
   /* Init empty pcr */
   for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
   {
-    pcr_concatenated[i] = (u_int8_t) pcr_aggr[i];
+    pcr_concatenated[i] = (u_int8_t)pcr_aggr[i];
   }
-
+  
   is_ima_template = strcmp(template->name, "ima") == 0 ? 1 : 0;
   is_imang_template = strcmp(template->name, "ima-ng") == 0 ? 1 : 0;
 
@@ -84,6 +112,8 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
   }
 
   template->template_data = calloc(template->template_data_len, sizeof(u_int8_t));
+  entry_aggregate = calloc(template->template_data_len, sizeof(u_int8_t));
+
   if (template->template_data == NULL)
   {
     printf("ERROR: out of memory\n");
@@ -109,26 +139,50 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
     int is_sha1 = 0;
 
     fread(&field_len, sizeof(u_int32_t), 1, fp); /* d-ng:[uint32 little endian hash len]* */
-
+    memcpy(entry_aggregate + acc, &field_len, sizeof field_len);
+    acc += sizeof field_len;
     if (field_len != 0x28)
     {
       fread(alg_sha1_field, sizeof(u_int8_t), 6, fp);
+      memcpy(entry_aggregate + acc, alg_field, sizeof alg_field);
+      acc += sizeof alg_field;
       is_sha1 = 1;
+      /* Here if it's a sha1 then is a violation because i'm using ima.ng sha256 */
       fread(template->template_data, sizeof(u_int8_t), SHA_DIGEST_LENGTH, fp); /* [file hash] */
+      /* If violation --> 0xff instead of leaving 0x00 */
+      memset(entry_aggregate + acc, 0xff, SHA_DIGEST_LENGTH);
+      acc += SHA_DIGEST_LENGTH;
     }
     else
     {
       fread(alg_field, sizeof(u_int8_t), 8, fp);
-
+      memcpy(entry_aggregate + acc, alg_field, sizeof alg_field);
+      acc += sizeof alg_field;
       fread(template->template_data, sizeof(u_int8_t), SHA256_DIGEST_LENGTH, fp); /* [file hash] */
+      memcpy(entry_aggregate + acc, template->template_data, SHA256_DIGEST_LENGTH);
+      acc += SHA256_DIGEST_LENGTH;
     }
 
     fread(&field_path_len, sizeof field_path_len, 1, fp); /* n-ng:[uint32 little endian path len] */
+    memcpy(entry_aggregate + acc, &field_path_len, sizeof field_path_len);
+    acc += sizeof field_path_len;
 
     path_field = malloc(field_path_len * sizeof(u_int8_t));
 
     fread(path_field, sizeof(u_int8_t), field_path_len, fp); /* [file hash] */
+    memcpy(entry_aggregate + acc, path_field, field_path_len);
+    acc += sizeof path_field; 
 
+    int mdTemplate;
+    if(!is_sha1)
+      mdTemplate = computeTemplateDigest(entry_aggregate, "sha256", &currentTemplateMD, template->template_data_len);
+
+    k = SHA256_DIGEST_LENGTH;
+    for(i=0; i<SHA256_DIGEST_LENGTH;i++){
+      pcr_concatenated[k++] = currentTemplateMD[i];
+    }
+    int mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH*2);
+    
     int entry_index = match_IMApath_Whitepath(path_field, field_path_len, white_entries, white_entries_size);
 
     unsigned char string_digest[DIGEST_LEN];
@@ -139,41 +193,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
       {
         sprintf(&string_digest[i * 2], "%02x", template->template_data[i]);
       }
-      /*for (i = 0; i < strlen(string_digest); i++)
-        fprintf(stdout, "%c", string_digest[i]);
-      fprintf(stdout, "\n");*/
-      k = SHA256_DIGEST_LENGTH;
-      for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-      {
-        pcr_concatenated[k++] = (u_int8_t) template->template_data[i]; // attach last part of concatenation
-      }
-      pcr_concatenated[SHA256_DIGEST_LENGTH*2] = '\0';
-      for (i = 0; i < SHA256_DIGEST_LENGTH*2; i++)
-        fprintf(stdout, "%02x", pcr_concatenated[i]);
-      fprintf(stdout, "\n");
-      int md_len = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH*2-1);
-      /*for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-        fprintf(stdout, "%02X", pcr_aggr[i]);
-      fprintf(stdout, "\n");*/
-      if (md_len < SHA256_DIGEST_LENGTH)
-        return -4;
     }
-    else
-    {
-      for (i = 0; i < SHA_DIGEST_LENGTH; i++)
-      {
-        sprintf(&string_digest[i * 2], "%02x", template->template_data[i]);
-      }
-      k = SHA_DIGEST_LENGTH;
-      for (i = 0; i < SHA_DIGEST_LENGTH; i++)
-      {
-        pcr_concatenated[k++] = template->template_data[i]; // attach last part of concatenation
-      }
-      int md_len = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH + SHA_DIGEST_LENGTH);
-      if (md_len < SHA256_DIGEST_LENGTH)
-        return -4;
-    }
-
     if (entry_index >= 0)
     {
       if (strcmp(white_entries[entry_index].digest, string_digest))
@@ -213,7 +233,7 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
   }
   /* Prepare stating pcr10 */
   u_int8_t *pcr_aggr;
-  pcr_aggr = calloc(SHA256_DIGEST_LENGTH+1, sizeof(u_int8_t));
+  pcr_aggr = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
 
   fscanf(whitelist_fp, "%d", &num_entries);
   white_entries = malloc(num_entries * sizeof(struct whitelist_entry));
@@ -247,6 +267,12 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
   for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
     fprintf(stdout, "%02X", pcr_aggr[i]);
   fprintf(stdout, "\n");
+
+  if(memcmp(pcr_aggr, pcr10_sha256, SHA256_DIGEST_LENGTH) == 0){
+    fprintf(stdout, "PCR10 verification successfull!\n");
+  }else {
+    fprintf(stdout, "PCR10 verification failed!\n");
+  }
 
   fclose(ima_fp);
   fclose(whitelist_fp);

@@ -6,6 +6,7 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tpm2_types.h>
 #include <tss2/tss2_mu.h>
+#include "../IMA/ima_read_writeOut_binary.h"
 
 #define ARRAY_LEN(x) sizeof(sizeof(x) / sizeof((x)[0]))
 
