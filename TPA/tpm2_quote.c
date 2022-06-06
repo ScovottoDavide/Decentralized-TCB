@@ -800,8 +800,7 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
   pcr_selection.count = htole32(pcr_selection.count);
 
   // Export TPML_PCR_SELECTION structure to pcr outfile
-  size_t fwrite_len = fwrite(&pcr_selection, sizeof(TPML_PCR_SELECTION),
-                             1, output_file);
+  size_t fwrite_len = fwrite(&pcr_selection, sizeof(TPML_PCR_SELECTION), 1, output_file);
   if (fwrite_len != 1)
   {
     fprintf(stderr, "write to output file failed\n");
@@ -862,6 +861,7 @@ static TSS2_RC write_output_files(void)
   if (ctx.pcr_output)
   {
     result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, ctx.pcr_output);
+    fclose(ctx.pcr_output);
     if (!result)
       is_success = result;
   }

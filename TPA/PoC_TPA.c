@@ -3,6 +3,8 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <openssl/rand.h>
 #include <unistd.h>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tctildr.h>
@@ -13,8 +15,38 @@
 //#include "../IMA/ima_read_writeOut_binary.h"
 #define PORT 8080
 
+#define MAX_RSA_KEY_BYTES ((2048 + 7) / 8)
+
+typedef struct
+{
+  u_int8_t tag;
+  u_int16_t size;
+  u_int8_t buffer[MAX_RSA_KEY_BYTES];
+} SIG_BLOB;
+
+typedef struct
+{
+  u_int8_t tag;
+  u_int16_t size;
+  u_int8_t *buffer; // Allocate on the fly
+} MESSAGE_BLOB;
+
+typedef struct
+{
+  u_int8_t tag;
+
+} PCRS_BLOB;
+
+typedef struct
+{
+  SIG_BLOB sig_blob;
+  MESSAGE_BLOB message_blob;
+
+} TO_SEND;
+
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
 void waitRARequest(char *nonce);
+int sendDataToRA();
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 
 int main()
@@ -94,13 +126,15 @@ int main()
     ExtendPCR9(esys_context, "sha1");
     ExtendPCR9(esys_context, "sha256");
   }
-  
+
   tss_r = tpm2_quote(esys_context);
   if (tss_r != TSS2_RC_SUCCESS)
   {
     printf("Error while computing quote!\n");
     exit(-1);
   }
+
+  //sendDataToRA();
   return 0;
 }
 
@@ -179,6 +213,55 @@ void waitRARequest(char *nonce)
   {
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
+  }
+}
+
+int sendDataToRA()
+{
+
+  int sock = 0, valread, i;
+  struct sockaddr_in serv_addr;
+  unsigned char buffer[32] = {0};
+  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+  {
+    printf("\n Socket creation error \n");
+    return -1;
+  }
+
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(PORT);
+
+  // Convert IPv4 and IPv6 addresses from text to binary form
+  if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
+  {
+    printf("\nInvalid address/ Address not supported \n");
+    return -1;
+  }
+
+  if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+  {
+    printf("\nConnection Failed \n");
+    return -1;
+  }
+
+retry:
+
+  if (!RAND_bytes(buffer, 32))
+  {
+    return -1;
+  }
+  if (strlen(buffer) == 31)
+  {
+    int i;
+    // buffer[32] = '\0';
+    for (i = 0; buffer[i] != '\0'; i++)
+      printf("%02x", buffer[i]);
+    printf("\n");
+    send(sock, buffer, strlen(buffer), 0);
+  }
+  else
+  {
+    goto retry;
   }
 }
 

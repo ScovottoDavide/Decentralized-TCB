@@ -9,6 +9,7 @@
 #include "whitelist_verify.h"
 #define PORT 8080
 
+void waitTPAData(char *nonce);
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
@@ -20,6 +21,7 @@ int main(int argc, char const *argv[])
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
   unsigned char buffer[32] = {0};
+  unsigned char nonce[32] = {0};
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
     printf("\n Socket creation error \n");
@@ -63,6 +65,7 @@ retry:
   }
 
   sleep(3);
+  //waitTPAData(nonce);
 
   if (!tpm2_checkquote())
   {
@@ -84,6 +87,60 @@ retry:
   verify_PCR10_whitelist(pcr10_sha1.buffer, pcr10_sha256.buffer);
 
   return 0;
+}
+
+void waitTPAData(char *nonce)
+{
+  int server_fd, new_socket, valread;
+  struct sockaddr_in address;
+  int opt = 1;
+  int addrlen = sizeof(address);
+
+  // Creating socket file descriptor
+  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+  {
+    perror("socket failed");
+    exit(EXIT_FAILURE);
+  }
+
+  // Forcefully attaching socket to the port 8080
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+  {
+    perror("setsockopt");
+    exit(EXIT_FAILURE);
+  }
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = INADDR_ANY;
+  address.sin_port = htons(PORT);
+
+  // Forcefully attaching socket to the port 8080
+  if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+  {
+    perror("bind failed");
+    exit(EXIT_FAILURE);
+  }
+
+  printf("\tWaiting for a request!\n\n");
+  if (listen(server_fd, 3) < 0)
+  {
+    perror("listen");
+    exit(EXIT_FAILURE);
+  }
+  if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+  {
+    perror("accept");
+    exit(EXIT_FAILURE);
+  }
+
+  valread = read(new_socket, nonce, 32);
+  if (valread < 0 || valread > 32)
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  for (int i = 0; nonce[i] != '\0'; i++)
+      printf("%02x", nonce[i]);
+    printf("\n");
 }
 
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id)

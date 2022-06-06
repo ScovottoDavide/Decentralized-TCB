@@ -77,13 +77,13 @@ int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, co
   return -1;
 }
 
-static int read_template_data(struct event *template, FILE *fp, const struct whitelist_entry *white_entries, int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH * +1])
+static int read_template_data(struct event *template, FILE *fp, const struct whitelist_entry *white_entries, int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH + 1])
 {
   int len, is_ima_template, is_imang_template, i, k = 0;
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
 
   u_int8_t *entry_aggregate; 
-  u_int8_t *currentTemplateMD = calloc(SHA256_DIGEST_LENGTH, sizeof(u_int8_t));
+  u_int8_t *currentTemplateMD = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
   u_int8_t acc = 0;
 
   /* Init empty pcr */
@@ -208,6 +208,9 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
       }
     }
   }
+  free(currentTemplateMD);
+  free(pcr_concatenated);
+  free(entry_aggregate);
   return 0;
 }
 
@@ -231,6 +234,7 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
     fprintf(stdout, "Could not open whitelist file\n");
     exit(-1);
   }
+  
   /* Prepare stating pcr10 */
   u_int8_t *pcr_aggr;
   pcr_aggr = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
@@ -262,7 +266,7 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
       exit(-1);
     }
   }
-
+  
   fprintf(stdout, "PCRAggr : ");
   for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
     fprintf(stdout, "%02X", pcr_aggr[i]);
