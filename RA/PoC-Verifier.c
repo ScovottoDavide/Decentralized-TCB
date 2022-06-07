@@ -8,8 +8,40 @@
 #include "tpm2_checkquote.h"
 #include "whitelist_verify.h"
 #define PORT 8080
+#define PORT_RECV 8081
 
-void waitTPAData(char *nonce);
+typedef struct {
+  u_int8_t tag;
+  u_int16_t size;
+} HEADER;
+
+typedef struct
+{
+  u_int8_t tag;
+  u_int16_t size;
+  u_int8_t *buffer;
+} SIG_BLOB;
+
+typedef struct
+{
+  u_int8_t tag;
+  u_int16_t size;
+  u_int8_t *buffer; // Allocate on the fly
+} MESSAGE_BLOB;
+
+typedef struct
+{
+  u_int8_t tag;
+
+} PCRS_BLOB;
+
+typedef struct
+{
+  SIG_BLOB sig_blob;
+  MESSAGE_BLOB message_blob;
+} TO_SEND;
+
+void waitTPAData(TO_SEND *TpaData);
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
@@ -21,7 +53,9 @@ int main(int argc, char const *argv[])
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
   unsigned char buffer[32] = {0};
-  unsigned char nonce[32] = {0};
+  
+  TO_SEND TpaData;
+
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
     printf("\n Socket creation error \n");
@@ -64,8 +98,8 @@ retry:
     goto retry;
   }
 
-  sleep(3);
-  //waitTPAData(nonce);
+  //sleep(3);
+  waitTPAData(&TpaData);
 
   if (!tpm2_checkquote())
   {
@@ -89,12 +123,13 @@ retry:
   return 0;
 }
 
-void waitTPAData(char *nonce)
+void waitTPAData(TO_SEND *TpaData)
 {
   int server_fd, new_socket, valread;
   struct sockaddr_in address;
-  int opt = 1;
+  int opt = 1, i;
   int addrlen = sizeof(address);
+  HEADER header;
 
   // Creating socket file descriptor
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
@@ -111,7 +146,7 @@ void waitTPAData(char *nonce)
   }
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = INADDR_ANY;
-  address.sin_port = htons(PORT);
+  address.sin_port = htons(PORT_RECV);
 
   // Forcefully attaching socket to the port 8080
   if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
@@ -120,7 +155,7 @@ void waitTPAData(char *nonce)
     exit(EXIT_FAILURE);
   }
 
-  printf("\tWaiting for a request!\n\n");
+  printf("\tWaiting for TPA to send Attestation data!\n\n");
   if (listen(server_fd, 3) < 0)
   {
     perror("listen");
@@ -132,15 +167,56 @@ void waitTPAData(char *nonce)
     exit(EXIT_FAILURE);
   }
 
-  valread = read(new_socket, nonce, 32);
-  if (valread < 0 || valread > 32)
+  valread = read(new_socket, &header, sizeof(HEADER));
+  if (valread < 0 || valread > sizeof(HEADER))
   {
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  for (int i = 0; nonce[i] != '\0'; i++)
-      printf("%02x", nonce[i]);
-    printf("\n");
+
+  TpaData->sig_blob.tag = header.tag;
+  TpaData->sig_blob.size = header.size;
+  TpaData->sig_blob.buffer = malloc(header.size*sizeof(u_int8_t));
+
+  valread = read(new_socket, TpaData->sig_blob.buffer, header.size);
+  if (valread < 0 || valread > header.size)
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  
+  fprintf(stdout, "TPA data arrived... \n\n");
+  fprintf(stdout, "SIGNATURE \n");
+  fprintf(stdout, "%d \n", TpaData->sig_blob.tag);
+  fprintf(stdout, "%d \n", TpaData->sig_blob.size);
+  for(i = 0; i < TpaData->sig_blob.size; i++){
+    fprintf(stdout, "%02x", TpaData->sig_blob.buffer[i]);
+  }
+  fprintf(stdout, "\n");
+
+  valread = read(new_socket, &header, sizeof(HEADER));
+  if (valread < 0 || valread > sizeof(HEADER))
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  TpaData->message_blob.tag = header.tag;
+  TpaData->message_blob.size = header.size;
+  TpaData->message_blob.buffer = malloc(header.size*sizeof(u_int8_t));
+  valread = read(new_socket, TpaData->message_blob.buffer, header.size);
+  if (valread < 0 || valread > header.size)
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  fprintf(stdout, "QUOTE \n");
+  fprintf(stdout, "%d \n", TpaData->message_blob.tag);
+  fprintf(stdout, "%d \n", TpaData->message_blob.size);
+  for(i = 0; i < TpaData->message_blob.size; i++){
+    fprintf(stdout, "%02x", TpaData->message_blob.buffer[i]);
+  }
+  fprintf(stdout, "\n");
+
 }
 
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id)

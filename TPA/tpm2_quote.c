@@ -716,20 +716,31 @@ TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest)
   return TSS2_RC_SUCCESS;
 }
 
-bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path)
+bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND *TpaData)
 {
   UINT8 *buffer;
   UINT16 size;
 
+  /** Set tag for the signature Blob*/
+  TpaData->sig_blob.tag = (u_int8_t) 1;
+
   // convert_sig for TPM2_ALG_RSASSA
   size = signature->signature.rsassa.sig.size;
   buffer = malloc(size);
+
+  /** Set size and allocate bufffer in order to save the signature*/
+  TpaData->sig_blob.size = size;
+  //TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size * sizeof(u_int8_t));
+
   if (!buffer)
   {
     fprintf(stderr, "OOM\n");
     return false;
   }
+
   memcpy(buffer, signature->signature.rsassa.sig.buffer, size);
+  /** Copy the signature in the Sig Buffer */
+  memcpy(TpaData->sig_blob.buffer, signature->signature.rsassa.sig.buffer, TpaData->sig_blob.size);
 
   if (!path)
   {
@@ -757,7 +768,7 @@ bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path)
   return true;
 }
 
-bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size)
+bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *TpaData)
 {
   if (!buf)
     return false;
@@ -767,6 +778,11 @@ bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size)
     fprintf(stderr, "No path specified\n");
     return false;
   }
+
+  TpaData->message_blob.tag = (u_int8_t) 2;
+  TpaData->message_blob.size = size;
+  //TpaData->message_blob.buffer = malloc(TpaData->message_blob.size * sizeof(u_int8_t));
+  memcpy(TpaData->message_blob.buffer, buf, TpaData->message_blob.size);
 
   FILE *fp = fopen(path, "wb+");
   if (!fp)
@@ -838,7 +854,7 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
   return true;
 }
 
-static TSS2_RC write_output_files(void)
+static TSS2_RC write_output_files(TO_SEND *TpaData)
 {
   bool is_success = true;
   bool result = true;
@@ -846,14 +862,14 @@ static TSS2_RC write_output_files(void)
   if (ctx.signature_path)
   {
     // signature format plain
-    result = tpm2_convert_sig_save(ctx.signature, ctx.signature_path);
+    result = tpm2_convert_sig_save(ctx.signature, ctx.signature_path, TpaData);
     if (!result)
       is_success = result;
   }
 
   if (ctx.message_path)
   {
-    result = tpm2_save_message_out(ctx.message_path, (UINT8 *)&ctx.quoted->attestationData, ctx.quoted->size);
+    result = tpm2_save_message_out(ctx.message_path, (UINT8 *)&ctx.quoted->attestationData, ctx.quoted->size, TpaData);
     if (!result)
       is_success = result;
   }
@@ -896,7 +912,7 @@ TSS2_RC tpm2_quote_internal(ESYS_CONTEXT *esys_context, tpm2_loaded_object *quot
   return TSS2_RC_SUCCESS;
 }
 
-TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx)
+TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData)
 {
   bool res;
   TSS2_RC tss_r;
@@ -1044,5 +1060,5 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx)
     }
   }
 
-  return write_output_files();
+  return write_output_files(TpaData);
 }

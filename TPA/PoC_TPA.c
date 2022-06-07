@@ -14,39 +14,11 @@
 #include "PCR9Extend.h"
 //#include "../IMA/ima_read_writeOut_binary.h"
 #define PORT 8080
-
-#define MAX_RSA_KEY_BYTES ((2048 + 7) / 8)
-
-typedef struct
-{
-  u_int8_t tag;
-  u_int16_t size;
-  u_int8_t buffer[MAX_RSA_KEY_BYTES];
-} SIG_BLOB;
-
-typedef struct
-{
-  u_int8_t tag;
-  u_int16_t size;
-  u_int8_t *buffer; // Allocate on the fly
-} MESSAGE_BLOB;
-
-typedef struct
-{
-  u_int8_t tag;
-
-} PCRS_BLOB;
-
-typedef struct
-{
-  SIG_BLOB sig_blob;
-  MESSAGE_BLOB message_blob;
-
-} TO_SEND;
+#define PORT_SEND 8081
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
 void waitRARequest(char *nonce);
-int sendDataToRA();
+int sendDataToRA(TO_SEND TpaData);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 
 int main()
@@ -58,6 +30,8 @@ int main()
   unsigned char nonce[32] = {0};
   int persistent_handles = 0, i;
   FILE *file_nonce;
+
+  TO_SEND TpaData;
 
   waitRARequest(nonce); // Receive request with nonce
   file_nonce = fopen("/etc/tc/challenge", "w");
@@ -127,14 +101,16 @@ int main()
     ExtendPCR9(esys_context, "sha256");
   }
 
-  tss_r = tpm2_quote(esys_context);
+  tss_r = tpm2_quote(esys_context, &TpaData);
   if (tss_r != TSS2_RC_SUCCESS)
   {
     printf("Error while computing quote!\n");
     exit(-1);
   }
 
-  //sendDataToRA();
+  /** SEND DATA TO THE REMOTE ATTESTOR */
+  sendDataToRA(TpaData);
+
   return 0;
 }
 
@@ -216,12 +192,11 @@ void waitRARequest(char *nonce)
   }
 }
 
-int sendDataToRA()
+int sendDataToRA(TO_SEND TpaData)
 {
 
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
-  unsigned char buffer[32] = {0};
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
     printf("\n Socket creation error \n");
@@ -229,7 +204,7 @@ int sendDataToRA()
   }
 
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(PORT);
+  serv_addr.sin_port = htons(PORT_SEND);
 
   // Convert IPv4 and IPv6 addresses from text to binary form
   if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
@@ -244,25 +219,10 @@ int sendDataToRA()
     return -1;
   }
 
-retry:
+  ssize_t sentBytes = send(sock, &TpaData, sizeof(TO_SEND), 0);
+  fprintf(stdout, "sentBytes = %d\n", sentBytes);
 
-  if (!RAND_bytes(buffer, 32))
-  {
-    return -1;
-  }
-  if (strlen(buffer) == 31)
-  {
-    int i;
-    // buffer[32] = '\0';
-    for (i = 0; buffer[i] != '\0'; i++)
-      printf("%02x", buffer[i]);
-    printf("\n");
-    send(sock, buffer, strlen(buffer), 0);
-  }
-  else
-  {
-    goto retry;
-  }
+  return sentBytes;
 }
 
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context)

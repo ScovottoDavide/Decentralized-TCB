@@ -16,6 +16,8 @@
 #define TPM2B_INIT(xsize) { .size = xsize, }
 #define TPM2B_EMPTY_INIT TPM2B_INIT(0)
 
+#define MAX_RSA_KEY_BYTES ((2048 + 7) / 8)
+
 typedef struct tpm2_algorithm tpm2_algorithm;
 struct tpm2_algorithm {
     int count;
@@ -27,6 +29,33 @@ struct tpm2_pcrs {
     size_t count;
     TPML_DIGEST pcr_values[TPM2_MAX_PCRS];
 };
+
+typedef struct
+{
+  u_int8_t tag; // 1
+  u_int16_t size;
+  u_int8_t buffer[MAX_RSA_KEY_BYTES];
+} SIG_BLOB;
+
+typedef struct
+{
+  u_int8_t tag; // 2
+  u_int16_t size;
+  u_int8_t buffer[sizeof(TPMS_ATTEST)]; // Allocate on the fly
+} MESSAGE_BLOB;
+
+typedef struct
+{
+  u_int8_t tag; // 3
+  TPML_PCR_SELECTION pcr_selection;
+  tpm2_pcrs pcrs;
+} PCRS_BLOB;
+
+typedef struct
+{
+  SIG_BLOB sig_blob;
+  MESSAGE_BLOB message_blob;
+} TO_SEND;
 
 bool pcr_parse_list(const char *str, size_t len, TPMS_PCR_SELECTION *pcr_select);
 bool pcr_parse_selections(const char *arg, TPML_PCR_SELECTION *pcr_select);
@@ -49,10 +78,10 @@ bool pcr_print(TPML_PCR_SELECTION *pcr_select, tpm2_pcrs *pcrs);
 bool tpm2_openssl_hash_pcr_banks(TPMI_ALG_HASH hash_alg, TPML_PCR_SELECTION *pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *digest);
 bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest);
 
-bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path);
-bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size);
+bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND *TpaData);
+bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *TpaData);
 bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file);
-static TSS2_RC write_output_files(void);
+static TSS2_RC write_output_files(TO_SEND *TpaData);
 
 // It's a "cast" from TPM2B_ATTEST to TPMS_ATTEST to get all the information related to the attested data 
 /*
@@ -88,4 +117,4 @@ TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest);
 
 // tpm2_quote_internal in createak_util.h --> to fix dependencies!!!!!!!!!
 
-TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx);
+TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData);
