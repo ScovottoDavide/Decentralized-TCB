@@ -348,7 +348,6 @@ bool pcr_print(TPML_PCR_SELECTION *pcr_select, tpm2_pcrs *pcrs)
 
       if (++di >= pcrs->pcr_values[vi].count)
       {
-        // if(vi+1 == pcr_select->count - 1 && di == 8)
         di = 0;
         ++vi;
       }
@@ -535,46 +534,20 @@ bool tpm2_checkquote(TO_SEND TpaData)
 
   ctx.pubkey_file_path = "/etc/tc/ak.pub.pem";
   ctx.halg = TPM2_ALG_SHA256;
-  // ctx.msg_file_path = "/etc/tc/quote.out";
-  // ctx.sig_file_path = "/etc/tc/sig.out";
-  // ctx.pcr_file_path = "/etc/tc/pcrs.out";
-  //ctx.nonce_file_path = "/etc/tc/challenge";
 
-  //ctx.extra_data.size = sizeof(ctx.extra_data.buffer);
   ctx.extra_data.size = TpaData.nonce_blob.size;
   memcpy(ctx.extra_data.buffer, TpaData.nonce_blob.buffer, ctx.extra_data.size);
-  /*res = read_nonce_from_file(ctx.nonce_file_path, &ctx.extra_data.size, ctx.extra_data.buffer);
-  if (!res)
-    return false;*/
 
   TPM2B_ATTEST *msg = malloc(sizeof(TPM2B_ATTEST));
   msg->size = TpaData.message_blob.size;
   memcpy(msg->attestationData, TpaData.message_blob.buffer, msg->size);
-  /*msg = message_from_file(ctx.msg_file_path);
-  if(!msg) return false;*/
 
   ctx.signature.size = TpaData.sig_blob.size;
   memcpy(ctx.signature.buffer, TpaData.sig_blob.buffer, ctx.signature.size);
-  /*res = tpm2_load_signature_from_path(ctx.sig_file_path, &ctx.signature);
-  if (!res)
-  {
-    fprintf(stderr, "Error while loading signature\n");
-    free(msg);
-    return false;
-  }*/
 
   TPML_PCR_SELECTION pcr_select;
   tpm2_pcrs *pcrs;
-  //tpm2_pcrs temp_pcrs = {};
-
-  // Read pcrs from the specified file
-  /*if (!pcrs_from_file(ctx.pcr_file_path, &pcr_select, &temp_pcrs))
-  {
-    // Internal error log
-    free(msg);
-    return false;
-  }*/
-  // pcrs = &temp_pcrs;
+ 
   pcr_select = TpaData.pcrs_blob.pcr_selection;
   pcrs = &TpaData.pcrs_blob.pcrs;
   if (le32toh(pcr_select.count) > TPM2_NUM_PCR_BANKS)

@@ -29,7 +29,6 @@ int main()
   TSS2_TCTI_CONTEXT *tcti_context = NULL;
   unsigned char nonce[32] = {0};
   int persistent_handles = 0, i;
-  FILE *file_nonce;
 
   TO_SEND TpaData;
 
