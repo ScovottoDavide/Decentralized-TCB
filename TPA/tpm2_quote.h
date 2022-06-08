@@ -11,24 +11,39 @@
 #define ARRAY_LEN(x) sizeof(sizeof(x) / sizeof((x)[0]))
 
 #define BUFFER_SIZE(type, field) (sizeof((((type *)NULL)->field)))
-#define TPM2B_TYPE_INIT(type, field) { .size = BUFFER_SIZE(type, field), }
+#define TPM2B_TYPE_INIT(type, field)  \
+  {                                   \
+    .size = BUFFER_SIZE(type, field), \
+  }
 
-#define TPM2B_INIT(xsize) { .size = xsize, }
+#define TPM2B_INIT(xsize) \
+  {                       \
+    .size = xsize,        \
+  }
 #define TPM2B_EMPTY_INIT TPM2B_INIT(0)
 
 #define MAX_RSA_KEY_BYTES ((2048 + 7) / 8)
 
 typedef struct tpm2_algorithm tpm2_algorithm;
-struct tpm2_algorithm {
-    int count;
-    TPMI_ALG_HASH alg[TPM2_NUM_PCR_BANKS];
+struct tpm2_algorithm
+{
+  int count;
+  TPMI_ALG_HASH alg[TPM2_NUM_PCR_BANKS];
 };
 
 typedef struct tpm2_pcrs tpm2_pcrs;
-struct tpm2_pcrs {
-    size_t count;
-    TPML_DIGEST pcr_values[TPM2_MAX_PCRS];
+struct tpm2_pcrs
+{
+  size_t count;
+  TPML_DIGEST pcr_values[TPM2_MAX_PCRS];
 };
+
+typedef struct
+{
+  u_int8_t tag; // 0
+  u_int16_t size;
+  u_int8_t buffer[32];
+} NONCE_BLOB;
 
 typedef struct
 {
@@ -53,6 +68,7 @@ typedef struct
 
 typedef struct
 {
+  NONCE_BLOB nonce_blob;
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
   PCRS_BLOB pcrs_blob;
@@ -66,7 +82,7 @@ bool read_nonce_from_file(const char *input, UINT16 *len, BYTE *buffer);
 
 TSS2_RC pcr_get_banks(ESYS_CONTEXT *esys_context, TPMS_CAPABILITY_DATA *capability_data, tpm2_algorithm *algs);
 TSS2_RC tpm2_public_to_scheme(ESYS_CONTEXT *ectx, ESYS_TR key, TPMI_ALG_PUBLIC *type, TPMT_SIG_SCHEME *sigscheme);
-//tpm2_alg_util_get_signature_scheme
+// tpm2_alg_util_get_signature_scheme
 TSS2_RC tpm2_get_signature_scheme(ESYS_CONTEXT *ectx, ESYS_TR key_handle, TPMI_ALG_HASH *halg, TPMI_ALG_SIG_SCHEME sig_scheme, TPMT_SIG_SCHEME *scheme);
 
 static void shrink_pcr_selection(TPML_PCR_SELECTION *s);
@@ -79,9 +95,9 @@ bool pcr_print(TPML_PCR_SELECTION *pcr_select, tpm2_pcrs *pcrs);
 bool tpm2_openssl_hash_pcr_banks(TPMI_ALG_HASH hash_alg, TPML_PCR_SELECTION *pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *digest);
 bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest);
 
-bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND *TpaData);
-bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *TpaData);
-bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file, TO_SEND *TpaData);
+bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, TO_SEND *TpaData);
+bool tpm2_save_message_out(UINT8 *buf, UINT16 size, TO_SEND *TpaData);
+bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, TO_SEND *TpaData);
 static TSS2_RC write_output_files(TO_SEND *TpaData);
 
 // It's a "cast" from TPM2B_ATTEST to TPMS_ATTEST to get all the information related to the attested data

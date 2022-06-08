@@ -716,20 +716,14 @@ TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest)
   return TSS2_RC_SUCCESS;
 }
 
-bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND *TpaData)
+bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, TO_SEND *TpaData)
 {
   UINT8 *buffer;
   UINT16 size;
 
-  /** Set tag for the signature Blob*/
-  TpaData->sig_blob.tag = (u_int8_t) 1;
-
   // convert_sig for TPM2_ALG_RSASSA
   size = signature->signature.rsassa.sig.size;
   buffer = malloc(size);
-
-  /** Set size and allocate bufffer in order to save the signature*/
-  TpaData->sig_blob.size = size;
 
   if (!buffer)
   {
@@ -737,76 +731,35 @@ bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND 
     return false;
   }
 
+  /** Set tag for the signature Blob*/
+  TpaData->sig_blob.tag = (u_int8_t)1;
+  /** Set size and allocate bufffer in order to save the signature*/
+  TpaData->sig_blob.size = size;
   memcpy(buffer, signature->signature.rsassa.sig.buffer, size);
   /** Copy the signature in the Sig Buffer */
   memcpy(TpaData->sig_blob.buffer, signature->signature.rsassa.sig.buffer, TpaData->sig_blob.size);
 
-  if (!path)
-  {
-    fprintf(stderr, "No path specified\n");
-    return false;
-  }
-  FILE *fp = fopen(path, "wb+");
-  if (!fp)
-  {
-    fprintf(stderr, "Could not open file %s\n", path);
-    return false;
-  }
-  size_t wrote = 0, index = 0;
-  do
-  {
-    wrote = fwrite(&buffer[index], 1, size, fp);
-    if (wrote != size)
-      return false;
-    size -= wrote;
-    index += wrote;
-  } while (size > 0);
-
-  fclose(fp);
   free(buffer);
   return true;
 }
 
-bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *TpaData)
+bool tpm2_save_message_out(UINT8 *buf, UINT16 size, TO_SEND *TpaData)
 {
   if (!buf)
     return false;
 
-  if (!path)
-  {
-    fprintf(stderr, "No path specified\n");
-    return false;
-  }
-
-  TpaData->message_blob.tag = (u_int8_t) 2;
+  TpaData->message_blob.tag = (u_int8_t)2;
   TpaData->message_blob.size = size;
   memcpy(TpaData->message_blob.buffer, buf, TpaData->message_blob.size);
 
-  FILE *fp = fopen(path, "wb+");
-  if (!fp)
-  {
-    fprintf(stderr, "Could not open file %s\n", path);
-    return false;
-  }
-  size_t wrote = 0, index = 0;
-  do
-  {
-    wrote = fwrite(&buf[index], 1, size, fp);
-    if (wrote != size)
-      return false;
-    size -= wrote;
-    index += wrote;
-  } while (size > 0);
-
-  fclose(fp);
   return true;
 }
 
-bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file, TO_SEND *TpaData)
+bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, TO_SEND *TpaData)
 {
 
   /** Export TPML_PCR_SELECTION structure to pcr blob  */
-  TpaData->pcrs_blob.tag = (u_int8_t) 3;
+  TpaData->pcrs_blob.tag = (u_int8_t)3;
 
   TPML_PCR_SELECTION pcr_selection = *pcr_select;
   for (UINT32 i = 0; i < pcr_selection.count; i++)
@@ -817,26 +770,12 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
   pcr_selection.count = htole32(pcr_selection.count);
 
   memcpy(&TpaData->pcrs_blob.pcr_selection, &pcr_selection, sizeof(TPML_PCR_SELECTION));
-  // Export TPML_PCR_SELECTION structure to pcr outfile
-  size_t fwrite_len = fwrite(&pcr_selection, sizeof(TPML_PCR_SELECTION), 1, output_file);
-  if (fwrite_len != 1)
-  {
-    fprintf(stderr, "write to output file failed\n");
-    return false;
-  }
 
   // Export PCR digests to pcr outfile
   UINT32 count = htole32(ppcrs->count);
 
   /** Set pcrs count */
   memcpy(&TpaData->pcrs_blob.pcrs.count, &count, sizeof(UINT32));
-
-  fwrite_len = fwrite(&count, sizeof(UINT32), 1, output_file);
-  if (fwrite_len != 1)
-  {
-    fprintf(stderr, "write to output file failed");
-    return false;
-  }
 
   tpm2_pcrs pcrs = *ppcrs;
   for (size_t j = 0; j < pcrs.count; j++)
@@ -851,12 +790,6 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
     pcr_value->count = htole32(pcr_value->count);
 
     memcpy(&TpaData->pcrs_blob.pcrs.pcr_values[j], pcr_value, sizeof(TPML_DIGEST));
-    fwrite_len = fwrite(pcr_value, sizeof(TPML_DIGEST), 1, output_file);
-    if (fwrite_len != 1)
-    {
-      fprintf(stderr, "write to output file failed");
-      return false;
-    }
   }
 
   return true;
@@ -867,28 +800,22 @@ static TSS2_RC write_output_files(TO_SEND *TpaData)
   bool is_success = true;
   bool result = true;
 
-  if (ctx.signature_path)
-  {
-    // signature format plain
-    result = tpm2_convert_sig_save(ctx.signature, ctx.signature_path, TpaData);
-    if (!result)
-      is_success = result;
-  }
+  // signature format plain
+  result = tpm2_convert_sig_save(ctx.signature, TpaData);
+  if (!result)
+    is_success = result;
 
-  if (ctx.message_path)
-  {
-    result = tpm2_save_message_out(ctx.message_path, (UINT8 *)&ctx.quoted->attestationData, ctx.quoted->size, TpaData);
-    if (!result)
-      is_success = result;
-  }
+  result = tpm2_save_message_out((UINT8 *)&ctx.quoted->attestationData, ctx.quoted->size, TpaData);
+  if (!result)
+    is_success = result;
 
-  if (ctx.pcr_output)
-  {
-    result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, ctx.pcr_output, TpaData);
-    fclose(ctx.pcr_output);
-    if (!result)
-      is_success = result;
-  }
+  // if (ctx.pcr_output)
+  //{
+  result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, TpaData);
+  // fclose(ctx.pcr_output);
+  if (!result)
+    is_success = result;
+  //}
 
   return is_success ? TSS2_RC_SUCCESS : TSS2_ESYS_RC_BAD_VALUE;
 }
@@ -935,27 +862,15 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData)
   if (!res)
     return TSS2_ESYS_RC_BAD_VALUE;
 
-  ctx.qualification_data.size = sizeof(ctx.qualification_data.buffer);
-  res = read_nonce_from_file("/etc/tc/challenge", &ctx.qualification_data.size, ctx.qualification_data.buffer);
-  if (!res)
-    return TSS2_ESYS_RC_BAD_VALUE;
+  ctx.qualification_data.size = TpaData->nonce_blob.size;
+  memcpy(ctx.qualification_data.buffer, TpaData->nonce_blob.buffer, ctx.qualification_data.size);
 
-  ctx.message_path = "/etc/tc/quote.out";
-  ctx.signature_path = "/etc/tc/sig.out";
-  ctx.pcr_path = "/etc/tc/pcrs.out";
   ctx.sig_hash_algorithm = TPM2_ALG_SHA256;
 
   tss_r = tpm2_util_object_load_auth(esys_ctx, ctx.key.ctx_path, ctx.key.auth_str, &ctx.key.object, false, TPM2_HANDLE_ALL_W_NV);
   if (tss_r != TSS2_RC_SUCCESS)
   {
     printf("Error while authorizing for AK!\n");
-    return TSS2_ESYS_RC_BAD_VALUE;
-  }
-
-  ctx.pcr_output = fopen(ctx.pcr_path, "wb+");
-  if (!ctx.pcr_output)
-  {
-    fprintf(stderr, "Could not open PCR output file \"%s\" \n", ctx.pcr_path);
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
@@ -1009,63 +924,60 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData)
     fprintf(stdout, "%02x", ctx.signature->signature.rsassa.sig.buffer[i]);
   fprintf(stdout, "\n");
 
-  if (ctx.pcr_output)
+  // Filter out invalid/unavailable PCR Selections
+  if (!pcr_check_pcr_selection(&ctx.cap_data, &ctx.pcr_selections))
   {
-    // Filter out invalid/unavailable PCR Selections
-    if (!pcr_check_pcr_selection(&ctx.cap_data, &ctx.pcr_selections))
-    {
-      fprintf(stderr, "Cannot filter unavailable PCR values for quote!\n");
-      return TSS2_ESYS_RC_BAD_VALUE;
-    }
+    fprintf(stderr, "Cannot filter unavailable PCR values for quote!\n");
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
-    // Read PCRs from TPM
-    tss_r = pcr_read_pcr_values(esys_ctx, &ctx.pcr_selections, &ctx.pcrs);
-    if (tss_r != TSS2_RC_SUCCESS)
-    {
-      fprintf(stderr, "Error while reading PCRs from TPM\n");
-      return TSS2_ESYS_RC_BAD_VALUE;
-    }
+  // Read PCRs from TPM
+  tss_r = pcr_read_pcr_values(esys_ctx, &ctx.pcr_selections, &ctx.pcrs);
+  if (tss_r != TSS2_RC_SUCCESS)
+  {
+    fprintf(stderr, "Error while reading PCRs from TPM\n");
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
-    tss_r = get_internal_attested_data(ctx.quoted, &ctx.attest);
-    if (tss_r != TSS2_RC_SUCCESS)
-    {
-      fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
-      return TSS2_ESYS_RC_BAD_VALUE;
-    }
+  tss_r = get_internal_attested_data(ctx.quoted, &ctx.attest);
+  if (tss_r != TSS2_RC_SUCCESS)
+  {
+    fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
-    res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
-    if (!res)
-    {
-      fprintf(stderr, "Error while printing PCRS to stdout\n");
-      return TSS2_ESYS_RC_BAD_VALUE;
-    }
+  res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
+  if (!res)
+  {
+    fprintf(stderr, "Error while printing PCRS to stdout\n");
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
-    // Calculate the digest from our selected PCR values (to ensure correctness)
-    TPM2B_DIGEST pcr_digest = TPM2B_TYPE_INIT(TPM2B_DIGEST, buffer);
-    res = tpm2_openssl_hash_pcr_banks(ctx.sig_hash_algorithm, &ctx.pcr_selections, &ctx.pcrs, &pcr_digest);
-    if (!res)
-    {
-      fprintf(stderr, "Error while computing hash PCR values needed for ensure correctness of quote\n");
-      return TSS2_ESYS_RC_BAD_VALUE;
-    }
+  // Calculate the digest from our selected PCR values (to ensure correctness)
+  TPM2B_DIGEST pcr_digest = TPM2B_TYPE_INIT(TPM2B_DIGEST, buffer);
+  res = tpm2_openssl_hash_pcr_banks(ctx.sig_hash_algorithm, &ctx.pcr_selections, &ctx.pcrs, &pcr_digest);
+  if (!res)
+  {
+    fprintf(stderr, "Error while computing hash PCR values needed for ensure correctness of quote\n");
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
-    fprintf(stdout, "calcDigest: ");
-    for (i = 0; i < pcr_digest.size; i++)
-      fprintf(stdout, "%02x", pcr_digest.buffer[i]);
-    fprintf(stdout, "\n");
+  fprintf(stdout, "calcDigest: ");
+  for (i = 0; i < pcr_digest.size; i++)
+    fprintf(stdout, "%02x", pcr_digest.buffer[i]);
+  fprintf(stdout, "\n");
 
-    // Make sure digest from quote matches calculated PCR digest
-    res = tpm2_util_verify_digests(&ctx.attest.attested.quote.pcrDigest, &pcr_digest);
-    if (!res)
-    {
-      fprintf(stderr, "Error: calculated PCRs digest does not match PCRs digest in the quote\n");
-      return TSS2_ESYS_RC_BAD_VALUE;
-    }
+  // Make sure digest from quote matches calculated PCR digest
+  res = tpm2_util_verify_digests(&ctx.attest.attested.quote.pcrDigest, &pcr_digest);
+  if (!res)
+  {
+    fprintf(stderr, "Error: calculated PCRs digest does not match PCRs digest in the quote\n");
+    return TSS2_ESYS_RC_BAD_VALUE;
+  }
 
-    if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0)
-    {
-      fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
-    }
+  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0)
+  {
+    fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }
 
   return write_output_files(TpaData);

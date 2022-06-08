@@ -34,20 +34,12 @@ int main()
   TO_SEND TpaData;
 
   waitRARequest(nonce); // Receive request with nonce
-  file_nonce = fopen("/etc/tc/challenge", "w");
-  if (!file_nonce)
-  {
-    fprintf(stderr, "Could not create/open file\n");
-    exit(-1);
-  }
-  fprintf(stdout, "Nonce received!");
 
-  fwrite(nonce, 1, strlen(nonce), file_nonce);
+  TpaData.nonce_blob.tag = (u_int8_t) 0;
+  TpaData.nonce_blob.size = sizeof nonce;
+  memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
 
-  fclose(file_nonce);
-  printf("\n");
-
-  tss_r = Tss2_TctiLdr_Initialize(getenv("TPM2TOOLS_TCTI"), &tcti_context);
+  tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
   if (tss_r != TSS2_RC_SUCCESS)
   {
     printf("Could not initialize tcti context\n");
@@ -190,6 +182,7 @@ void waitRARequest(char *nonce)
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  nonce[32] = '\0';
 }
 
 int sendDataToRA(TO_SEND TpaData)
@@ -218,6 +211,11 @@ int sendDataToRA(TO_SEND TpaData)
     printf("\nConnection Failed \n");
     return -1;
   }
+
+  /** NO NEED TO SEND BACK THE NONCE SINCE THE RA WILL USE THE NONCE HE GENERATED FOR THIS REQUEST
+   *  ALSO IMPORTANT BECAUSE IT AVOIDS REPLAY ATTACKS IF THE RA DOES NOT DO ANY CHECKS ON THE FRESHNESS
+   *  OF THE JUST RECEIVED NONCE
+  */
 
   ssize_t sentBytes = send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), 0);

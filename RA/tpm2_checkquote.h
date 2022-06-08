@@ -11,7 +11,6 @@
 #include <tss2/tss2_tpm2_types.h>
 #include <tss2/tss2_mu.h>
 
-
 #define BUFFER_SIZE(type, field) (sizeof((((type *)NULL)->field)))
 #define TPM2B_TYPE_INIT(type, field) { .size = BUFFER_SIZE(type, field), }
 
@@ -58,6 +57,43 @@ struct tpm2_pcrs {
     size_t count;
     TPML_DIGEST pcr_values[TPM2_MAX_PCRS];
 };
+
+typedef struct
+{
+  u_int8_t tag; // 0
+  u_int16_t size;
+  u_int8_t buffer[32];
+} NONCE_BLOB;
+
+typedef struct
+{
+  u_int8_t tag; //1
+  u_int16_t size;
+  u_int8_t *buffer;
+} SIG_BLOB;
+
+typedef struct
+{
+  u_int8_t tag; //2
+  u_int16_t size;
+  u_int8_t *buffer; // Allocate on the fly
+} MESSAGE_BLOB;
+
+typedef struct
+{
+  u_int8_t tag; // 3
+  TPML_PCR_SELECTION pcr_selection;
+  tpm2_pcrs pcrs;
+} PCRS_BLOB;
+
+typedef struct
+{
+  NONCE_BLOB nonce_blob;
+  SIG_BLOB sig_blob;
+  MESSAGE_BLOB message_blob;
+  PCRS_BLOB pcrs_blob;
+} TO_SEND;
+
 
 bool files_get_file_size(FILE *fp, unsigned long *file_size, const char *path);
 bool read_nonce_from_file(const char *input, UINT16 *len, BYTE *buffer);
@@ -110,4 +146,4 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey);
 bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest);
 bool verify(void);
 
-bool tpm2_checkquote();
+bool tpm2_checkquote(TO_SEND TpaData);

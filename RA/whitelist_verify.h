@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
+#include "tpm2_checkquote.h"
 
 #define TCG_EVENT_NAME_LEN_MAX	255
 #define DIGEST_LEN 64
@@ -25,7 +26,6 @@ struct whitelist_entry {
     u_int8_t digest[DIGEST_LEN+1];
     char *path;
 };
-
 
 int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
 int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, const struct whitelist_entry *white_entries, int white_entries_size);

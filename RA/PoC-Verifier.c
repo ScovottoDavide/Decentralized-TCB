@@ -5,58 +5,27 @@
 #include <unistd.h>
 #include <openssl/rand.h>
 
-#include "tpm2_checkquote.h"
+//#include "tpm2_checkquote.h"
 #include "whitelist_verify.h"
+#define NONCE_LEN 32
 #define PORT 8080
 #define PORT_RECV 8081
-
-typedef struct {
-  u_int8_t tag;
-  u_int16_t size;
-} HEADER;
-
-typedef struct
-{
-  u_int8_t tag;
-  u_int16_t size;
-  u_int8_t *buffer;
-} SIG_BLOB;
-
-typedef struct
-{
-  u_int8_t tag;
-  u_int16_t size;
-  u_int8_t *buffer; // Allocate on the fly
-} MESSAGE_BLOB;
-
-typedef struct
-{
-  u_int8_t tag; // 3
-  TPML_PCR_SELECTION pcr_selection;
-  tpm2_pcrs pcrs;
-} PCRS_BLOB;
-
-typedef struct
-{
-  SIG_BLOB sig_blob;
-  MESSAGE_BLOB message_blob;
-  PCRS_BLOB pcrs_blob;
-} TO_SEND;
 
 void waitTPAData(TO_SEND *TpaData);
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
-bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256);
+bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256, PCRS_BLOB pcrs_blob);
 
 int main(int argc, char const *argv[])
 {
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
-  unsigned char buffer[32] = {0};
-
   TO_SEND TpaData;
+
+  TpaData.nonce_blob.tag = 0;
+  TpaData.nonce_blob.size = NONCE_LEN;
 
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
@@ -82,27 +51,22 @@ int main(int argc, char const *argv[])
 
 retry:
 
-  if (!RAND_bytes(buffer, 32))
+  if (!RAND_bytes(TpaData.nonce_blob.buffer, NONCE_LEN))
   {
     return -1;
   }
-  if (strlen(buffer) == 31)
-  {
-    int i;
-    // buffer[32] = '\0';
-    for (i = 0; buffer[i] != '\0'; i++)
-      printf("%02x", buffer[i]);
-    printf("\n");
-    send(sock, buffer, strlen(buffer), 0);
-  }
   else
   {
-    goto retry;
+    TpaData.nonce_blob.buffer[NONCE_LEN] = '\0';
+    for (i = 0; i < NONCE_LEN; i++)
+      printf("%02x", TpaData.nonce_blob.buffer[i]);
+    printf("\n");
+    send(sock, TpaData.nonce_blob.buffer, NONCE_LEN, 0);
   }
 
   waitTPAData(&TpaData);
 
-  if (!tpm2_checkquote())
+  if (!tpm2_checkquote(TpaData))
   {
     fprintf(stderr, "Error while verifying quote!\n");
     exit(-1);
@@ -111,7 +75,7 @@ retry:
 
   TPM2B_DIGEST pcr10_sha256, pcr10_sha1;
   // Get also pcr10 since we're reading pcrs here
-  if (!PCR9_verification(&pcr10_sha1, &pcr10_sha256))
+  if (!PCR9_verification(&pcr10_sha1, &pcr10_sha256, TpaData.pcrs_blob))
   {
     fprintf(stderr, "PCR9 verification failed\n");
     exit(-1);
@@ -130,7 +94,6 @@ void waitTPAData(TO_SEND *TpaData)
   struct sockaddr_in address;
   int opt = 1, i;
   int addrlen = sizeof(address);
-  HEADER header;
 
   // Creating socket file descriptor
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
@@ -174,27 +137,31 @@ void waitTPAData(TO_SEND *TpaData)
   valread = read(new_socket, &TpaData->pcrs_blob.tag, sizeof(u_int8_t));
   if (valread < 0 || valread > sizeof(u_int8_t))
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  if(TpaData->pcrs_blob.tag != 3){
+    fprintf(stdout, "Wrong tag received for the pcrs!\n");
     exit(EXIT_FAILURE);
   }
   valread = read(new_socket, &TpaData->pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION));
   if (valread < 0 || valread > sizeof(TPML_PCR_SELECTION))
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
 
   valread = read(new_socket, &TpaData->pcrs_blob.pcrs.count, sizeof TpaData->pcrs_blob.pcrs.count);
   if (valread < 0 || valread > sizeof TpaData->pcrs_blob.pcrs.count)
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
 
   valread = read(new_socket, &TpaData->pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count);
   if (valread < 0 || valread > sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count)
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
   // fprintf(stdout, "PCRS \n");
@@ -206,29 +173,34 @@ void waitTPAData(TO_SEND *TpaData)
   valread = read(new_socket, &TpaData->sig_blob.tag, sizeof(u_int8_t));
   if (valread < 0 || valread > sizeof(u_int8_t))
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  if(TpaData->sig_blob.tag != 1){
+    fprintf(stdout, "Wrong tag received for the signature!\n");
     exit(EXIT_FAILURE);
   }
   valread = read(new_socket, &TpaData->sig_blob.size, sizeof(u_int16_t));
   if (valread < 0 || valread > sizeof(u_int16_t))
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
 
-  TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size*sizeof(u_int8_t));
+  TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size * sizeof(u_int8_t));
 
-  valread = read(new_socket, TpaData->sig_blob.buffer, sizeof(u_int8_t)*TpaData->sig_blob.size);
-  if (valread < 0 || valread > sizeof(u_int8_t)*TpaData->sig_blob.size)
+  valread = read(new_socket, TpaData->sig_blob.buffer, sizeof(u_int8_t) * TpaData->sig_blob.size);
+  if (valread < 0 || valread > sizeof(u_int8_t) * TpaData->sig_blob.size)
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
 
   fprintf(stdout, "SIGNATURE \n");
   fprintf(stdout, "%d \n", TpaData->sig_blob.tag);
   fprintf(stdout, "%d \n", TpaData->sig_blob.size);
-  for(i = 0; i < TpaData->sig_blob.size; i++){
+  for (i = 0; i < TpaData->sig_blob.size; i++)
+  {
     fprintf(stdout, "%02x", TpaData->sig_blob.buffer[i]);
   }
   fprintf(stdout, "\n");
@@ -238,27 +210,32 @@ void waitTPAData(TO_SEND *TpaData)
   valread = read(new_socket, &TpaData->message_blob.tag, sizeof(u_int8_t));
   if (valread < 0 || valread > sizeof(u_int8_t))
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  if(TpaData->message_blob.tag != 2){
+    fprintf(stdout, "Wrong tag received for the quote!\n");
     exit(EXIT_FAILURE);
   }
   valread = read(new_socket, &TpaData->message_blob.size, sizeof(u_int16_t));
   if (valread < 0 || valread > sizeof(u_int16_t))
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
 
-  TpaData->message_blob.buffer = malloc(TpaData->message_blob.size*sizeof(u_int8_t));
+  TpaData->message_blob.buffer = malloc(TpaData->message_blob.size * sizeof(u_int8_t));
   valread = read(new_socket, TpaData->message_blob.buffer, TpaData->message_blob.size);
   if (valread < 0 || valread > TpaData->message_blob.size)
   {
-    printf("Error while reading through socket!\n");
+    fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
   fprintf(stdout, "QUOTE \n");
   fprintf(stdout, "%d \n", TpaData->message_blob.tag);
   fprintf(stdout, "%d \n", TpaData->message_blob.size);
-  for(i = 0; i < TpaData->message_blob.size; i++){
+  for (i = 0; i < TpaData->message_blob.size; i++)
+  {
     fprintf(stdout, "%02x", TpaData->message_blob.buffer[i]);
   }
   fprintf(stdout, "\n");
@@ -346,8 +323,8 @@ bool openAKPub(const char *path, unsigned char **akPub)
     return false;
   }
 
-  char *line = malloc(4096*sizeof(char));
-  char *buff = malloc(4096*sizeof(char));
+  char *line = malloc(4096 * sizeof(char));
+  char *buff = malloc(4096 * sizeof(char));
   char h1[128], h2[128], h3[128];
   // remove the header of the AK public key
   fscanf(ak_pub, "%s %s %s", h1, h2, h3);
@@ -432,22 +409,17 @@ int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, 
   return md_len;
 }
 
-bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256)
+bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256, PCRS_BLOB pcrs_blob)
 {
   TPML_PCR_SELECTION pcr_select;
   tpm2_pcrs *pcrs;
   tpm2_pcrs temp_pcrs = {};
   TPM2B_DIGEST pcr9_sha1, pcr9_sha256;
-  const char *file_path = "/etc/tc/pcrs.out";
   int i;
 
-  // Read pcrs from the specified file
-  if (!pcrs_from_file(file_path, &pcr_select, &temp_pcrs))
-  {
-    // Internal error log
-    return false;
-  }
-  pcrs = &temp_pcrs;
+  // Get pcrs from the received pcrs blob
+  pcr_select = pcrs_blob.pcr_selection;
+  pcrs = &pcrs_blob.pcrs;
   if (le32toh(pcr_select.count) > TPM2_NUM_PCR_BANKS)
   {
     return false;
@@ -499,11 +471,13 @@ bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256)
 
   fprintf(stdout, "expected_PCR9sha1 : ");
   for (i = 0; i < md_len_sha1; i++)
-    fprintf(stdout, "%02x", expected_PCR9sha1[i]);
+    fprintf(stdout, "%02X", expected_PCR9sha1[i]);
   fprintf(stdout, "\n");
-
-  if (strncmp(expected_PCR9sha1, pcr9_sha1.buffer, pcr9_sha1.size))
-    return false;
+  for (i = 0; i < md_len_sha1; i++)
+  {
+    if (pcr9_sha1.buffer[i] != expected_PCR9sha1[i])
+      return false;
+  }
 
   free(pcr_sha1);
   free(digest_sha1);
@@ -528,8 +502,11 @@ bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256)
     fprintf(stdout, "%02X", expected_PCR9sha256[i]);
   fprintf(stdout, "\n");
 
-  if (strncmp(expected_PCR9sha256, pcr9_sha256.buffer, pcr9_sha256.size))
-    return false;
+  for (i = 0; i < md_len_sha256; i++)
+  {
+    if (pcr9_sha256.buffer[i] != expected_PCR9sha256[i])
+      return false;
+  }
 
   free(pcr_sha256);
   free(digest_sha256);
