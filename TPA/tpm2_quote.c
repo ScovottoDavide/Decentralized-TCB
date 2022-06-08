@@ -730,7 +730,6 @@ bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND 
 
   /** Set size and allocate bufffer in order to save the signature*/
   TpaData->sig_blob.size = size;
-  //TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size * sizeof(u_int8_t));
 
   if (!buffer)
   {
@@ -781,7 +780,6 @@ bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *T
 
   TpaData->message_blob.tag = (u_int8_t) 2;
   TpaData->message_blob.size = size;
-  //TpaData->message_blob.buffer = malloc(TpaData->message_blob.size * sizeof(u_int8_t));
   memcpy(TpaData->message_blob.buffer, buf, TpaData->message_blob.size);
 
   FILE *fp = fopen(path, "wb+");
@@ -804,8 +802,11 @@ bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *T
   return true;
 }
 
-bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file)
+bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file, TO_SEND *TpaData)
 {
+
+  /** Export TPML_PCR_SELECTION structure to pcr blob  */
+  TpaData->pcrs_blob.tag = (u_int8_t) 3;
 
   TPML_PCR_SELECTION pcr_selection = *pcr_select;
   for (UINT32 i = 0; i < pcr_selection.count; i++)
@@ -815,6 +816,7 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
   }
   pcr_selection.count = htole32(pcr_selection.count);
 
+  memcpy(&TpaData->pcrs_blob.pcr_selection, &pcr_selection, sizeof(TPML_PCR_SELECTION));
   // Export TPML_PCR_SELECTION structure to pcr outfile
   size_t fwrite_len = fwrite(&pcr_selection, sizeof(TPML_PCR_SELECTION), 1, output_file);
   if (fwrite_len != 1)
@@ -825,6 +827,10 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
 
   // Export PCR digests to pcr outfile
   UINT32 count = htole32(ppcrs->count);
+
+  /** Set pcrs count */
+  memcpy(&TpaData->pcrs_blob.pcrs.count, &count, sizeof(UINT32));
+
   fwrite_len = fwrite(&count, sizeof(UINT32), 1, output_file);
   if (fwrite_len != 1)
   {
@@ -843,6 +849,8 @@ bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs
       p->size = htole16(p->size);
     }
     pcr_value->count = htole32(pcr_value->count);
+
+    memcpy(&TpaData->pcrs_blob.pcrs.pcr_values[j], pcr_value, sizeof(TPML_DIGEST));
     fwrite_len = fwrite(pcr_value, sizeof(TPML_DIGEST), 1, output_file);
     if (fwrite_len != 1)
     {
@@ -876,7 +884,7 @@ static TSS2_RC write_output_files(TO_SEND *TpaData)
 
   if (ctx.pcr_output)
   {
-    result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, ctx.pcr_output);
+    result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, ctx.pcr_output, TpaData);
     fclose(ctx.pcr_output);
     if (!result)
       is_success = result;

@@ -31,14 +31,16 @@ typedef struct
 
 typedef struct
 {
-  u_int8_t tag;
-
+  u_int8_t tag; // 3
+  TPML_PCR_SELECTION pcr_selection;
+  tpm2_pcrs pcrs;
 } PCRS_BLOB;
 
 typedef struct
 {
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
+  PCRS_BLOB pcrs_blob;
 } TO_SEND;
 
 void waitTPAData(TO_SEND *TpaData);
@@ -53,7 +55,7 @@ int main(int argc, char const *argv[])
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
   unsigned char buffer[32] = {0};
-  
+
   TO_SEND TpaData;
 
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -98,7 +100,6 @@ retry:
     goto retry;
   }
 
-  //sleep(3);
   waitTPAData(&TpaData);
 
   if (!tpm2_checkquote())
@@ -167,25 +168,63 @@ void waitTPAData(TO_SEND *TpaData)
     exit(EXIT_FAILURE);
   }
 
-  valread = read(new_socket, &header, sizeof(HEADER));
-  if (valread < 0 || valread > sizeof(HEADER))
-  {
-    printf("Error while reading through socket!\n");
-    exit(EXIT_FAILURE);
-  }
-
-  TpaData->sig_blob.tag = header.tag;
-  TpaData->sig_blob.size = header.size;
-  TpaData->sig_blob.buffer = malloc(header.size*sizeof(u_int8_t));
-
-  valread = read(new_socket, TpaData->sig_blob.buffer, header.size);
-  if (valread < 0 || valread > header.size)
-  {
-    printf("Error while reading through socket!\n");
-    exit(EXIT_FAILURE);
-  }
-  
   fprintf(stdout, "TPA data arrived... \n\n");
+
+  /** READ PCRS FROM SOCKET */
+  valread = read(new_socket, &TpaData->pcrs_blob.tag, sizeof(u_int8_t));
+  if (valread < 0 || valread > sizeof(u_int8_t))
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  valread = read(new_socket, &TpaData->pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION));
+  if (valread < 0 || valread > sizeof(TPML_PCR_SELECTION))
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+
+  valread = read(new_socket, &TpaData->pcrs_blob.pcrs.count, sizeof TpaData->pcrs_blob.pcrs.count);
+  if (valread < 0 || valread > sizeof TpaData->pcrs_blob.pcrs.count)
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+
+  valread = read(new_socket, &TpaData->pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count);
+  if (valread < 0 || valread > sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count)
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  // fprintf(stdout, "PCRS \n");
+  // fprintf(stdout, "%d\n", TpaData->pcrs_blob.tag);
+  // pcr_print(&TpaData->pcrs_blob.pcr_selection, &TpaData->pcrs_blob.pcrs);
+  /** END OF READING PCRS */
+
+  /** READ SIGNATURE FROM SOCKET */
+  valread = read(new_socket, &TpaData->sig_blob.tag, sizeof(u_int8_t));
+  if (valread < 0 || valread > sizeof(u_int8_t))
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  valread = read(new_socket, &TpaData->sig_blob.size, sizeof(u_int16_t));
+  if (valread < 0 || valread > sizeof(u_int16_t))
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+
+  TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size*sizeof(u_int8_t));
+
+  valread = read(new_socket, TpaData->sig_blob.buffer, sizeof(u_int8_t)*TpaData->sig_blob.size);
+  if (valread < 0 || valread > sizeof(u_int8_t)*TpaData->sig_blob.size)
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+
   fprintf(stdout, "SIGNATURE \n");
   fprintf(stdout, "%d \n", TpaData->sig_blob.tag);
   fprintf(stdout, "%d \n", TpaData->sig_blob.size);
@@ -193,18 +232,25 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "%02x", TpaData->sig_blob.buffer[i]);
   }
   fprintf(stdout, "\n");
+  /** END OF READING SIGNATURE */
 
-  valread = read(new_socket, &header, sizeof(HEADER));
-  if (valread < 0 || valread > sizeof(HEADER))
+  /** READ QUOTE FROM SOCKET */
+  valread = read(new_socket, &TpaData->message_blob.tag, sizeof(u_int8_t));
+  if (valread < 0 || valread > sizeof(u_int8_t))
   {
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  TpaData->message_blob.tag = header.tag;
-  TpaData->message_blob.size = header.size;
-  TpaData->message_blob.buffer = malloc(header.size*sizeof(u_int8_t));
-  valread = read(new_socket, TpaData->message_blob.buffer, header.size);
-  if (valread < 0 || valread > header.size)
+  valread = read(new_socket, &TpaData->message_blob.size, sizeof(u_int16_t));
+  if (valread < 0 || valread > sizeof(u_int16_t))
+  {
+    printf("Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+
+  TpaData->message_blob.buffer = malloc(TpaData->message_blob.size*sizeof(u_int8_t));
+  valread = read(new_socket, TpaData->message_blob.buffer, TpaData->message_blob.size);
+  if (valread < 0 || valread > TpaData->message_blob.size)
   {
     printf("Error while reading through socket!\n");
     exit(EXIT_FAILURE);
@@ -216,7 +262,7 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "%02x", TpaData->message_blob.buffer[i]);
   }
   fprintf(stdout, "\n");
-
+  /** END OF READING QUOTE */
 }
 
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id)

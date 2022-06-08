@@ -219,9 +219,20 @@ int sendDataToRA(TO_SEND TpaData)
     return -1;
   }
 
-  ssize_t sentBytes = send(sock, &TpaData, sizeof(TO_SEND), 0);
-  fprintf(stdout, "sentBytes = %d\n", sentBytes);
+  ssize_t sentBytes = send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes += send(sock, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), 0);
+  sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count, 0);
+  sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST)*TpaData.pcrs_blob.pcrs.count, 0);
 
+  sentBytes += send(sock, &TpaData.sig_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes += send(sock, &TpaData.sig_blob.size, sizeof(u_int16_t), 0);
+  sentBytes += send(sock, &TpaData.sig_blob.buffer, sizeof(u_int8_t)*TpaData.sig_blob.size, 0);
+
+  sentBytes += send(sock, &TpaData.message_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes += send(sock, &TpaData.message_blob.size, sizeof(u_int16_t), 0);
+  sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t)*TpaData.message_blob.size, 0);
+
+  fprintf(stdout, "sentBytes = %d\n", sentBytes);
   return sentBytes;
 }
 

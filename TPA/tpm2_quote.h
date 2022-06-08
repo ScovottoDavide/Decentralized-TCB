@@ -41,7 +41,7 @@ typedef struct
 {
   u_int8_t tag; // 2
   u_int16_t size;
-  u_int8_t buffer[sizeof(TPMS_ATTEST)]; // Allocate on the fly
+  u_int8_t buffer[sizeof(TPMS_ATTEST)];
 } MESSAGE_BLOB;
 
 typedef struct
@@ -55,6 +55,7 @@ typedef struct
 {
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
+  PCRS_BLOB pcrs_blob;
 } TO_SEND;
 
 bool pcr_parse_list(const char *str, size_t len, TPMS_PCR_SELECTION *pcr_select);
@@ -80,10 +81,10 @@ bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_diges
 
 bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, const char *path, TO_SEND *TpaData);
 bool tpm2_save_message_out(const char *path, UINT8 *buf, UINT16 size, TO_SEND *TpaData);
-bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file);
+bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, FILE *output_file, TO_SEND *TpaData);
 static TSS2_RC write_output_files(TO_SEND *TpaData);
 
-// It's a "cast" from TPM2B_ATTEST to TPMS_ATTEST to get all the information related to the attested data 
+// It's a "cast" from TPM2B_ATTEST to TPMS_ATTEST to get all the information related to the attested data
 /*
 // Table 115 - TPMU_ATTEST Union
  typedef union {
@@ -95,7 +96,7 @@ static TSS2_RC write_output_files(TO_SEND *TpaData);
    TPMS_TIME_ATTEST_INFO   time;
    TPMS_NV_CERTIFY_INFO    nv;
  } TPMU_ATTEST;
- 
+
  // Table 116 - TPMS_ATTEST Structure
  typedef struct {
    TPM_GENERATED   magic;
@@ -106,7 +107,7 @@ static TSS2_RC write_output_files(TO_SEND *TpaData);
    UINT64          firmwareVersion;
    TPMU_ATTEST     attested;
  } TPMS_ATTEST;
- 
+
  // Table 117 - TPM2B_ATTEST Structure
  typedef struct {
    UINT16 size;
