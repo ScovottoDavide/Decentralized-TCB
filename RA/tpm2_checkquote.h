@@ -86,12 +86,30 @@ typedef struct
   tpm2_pcrs pcrs;
 } PCRS_BLOB;
 
+#define TCG_EVENT_NAME_LEN_MAX	255
+struct event {
+	struct {
+		u_int32_t pcr;
+		u_int8_t digest[SHA_DIGEST_LENGTH];
+		u_int32_t name_len;
+	} header;
+	char name[TCG_EVENT_NAME_LEN_MAX + 1];
+	u_int32_t template_data_len;
+	u_int8_t *template_data;	/* template related data */
+};
+typedef struct {
+  u_int8_t tag; // 4
+  u_int16_t size;
+  struct event *logEntry; // realloc as soon as the number of log entries passes the preallocated size
+} IMA_LOG_BLOB;
+
 typedef struct
 {
   NONCE_BLOB nonce_blob;
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
   PCRS_BLOB pcrs_blob;
+  IMA_LOG_BLOB ima_log_blob;
 } TO_SEND;
 
 

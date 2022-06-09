@@ -1,8 +1,8 @@
 #define the C compiler to use
-CC = gcc
+CC = gcc -g
 
 # define any library to link into executable:
-#  if I want to link libraries (libx.so or libx.a) I use the -llibname option
+# if I want to link libraries (libx.so or libx.a) I use the -llibname option
 LIBS = -ltss2-esys -ltss2-tctildr -ltss2-mu -lssl -lcrypto
 
 # define the C source files

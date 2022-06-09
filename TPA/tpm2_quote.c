@@ -14,23 +14,17 @@ struct tpm_quote_ctx
     tpm2_loaded_object object;
   } key;
 
-  // tpm2_convert_sig_fmt sig_format;
   TPMI_ALG_HASH sig_hash_algorithm;
   TPM2B_DATA qualification_data;
   TPML_PCR_SELECTION pcr_selections;
   TPMS_CAPABILITY_DATA cap_data;
   tpm2_pcrs pcrs;
-  // tpm2_convert_pcrs_output_fmt pcrs_format;
   TPMT_SIG_SCHEME in_scheme;
   TPMI_ALG_SIG_SCHEME sig_scheme;
 
   /*
    * Outputs
    */
-  FILE *pcr_output;
-  char *pcr_path;
-  char *signature_path;
-  char *message_path;
   TPMS_ATTEST attest;
   TPM2B_ATTEST *quoted;
   TPMT_SIGNATURE *signature;
@@ -809,13 +803,9 @@ static TSS2_RC write_output_files(TO_SEND *TpaData)
   if (!result)
     is_success = result;
 
-  // if (ctx.pcr_output)
-  //{
   result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, TpaData);
-  // fclose(ctx.pcr_output);
   if (!result)
     is_success = result;
-  //}
 
   return is_success ? TSS2_RC_SUCCESS : TSS2_ESYS_RC_BAD_VALUE;
 }
@@ -975,10 +965,11 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData)
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements") != 0)
+  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements", &TpaData->ima_log_blob) != 0)
   {
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }
+  // fprintf(stdout, "tag=%d  size=%d  sizeof=%d\n", TpaData->ima_log_blob.tag, TpaData->ima_log_blob.size, sizeof TpaData->ima_log_blob.logEntry);
 
   return write_output_files(TpaData);
 }

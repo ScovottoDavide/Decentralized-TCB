@@ -72,6 +72,7 @@ typedef struct
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
   PCRS_BLOB pcrs_blob;
+  IMA_LOG_BLOB ima_log_blob; // defined in /IMA/ima_read_writeOut_binary.h
 } TO_SEND;
 
 bool pcr_parse_list(const char *str, size_t len, TPMS_PCR_SELECTION *pcr_select);

@@ -34,7 +34,7 @@ int main()
 
   waitRARequest(nonce); // Receive request with nonce
 
-  TpaData.nonce_blob.tag = (u_int8_t) 0;
+  TpaData.nonce_blob.tag = (u_int8_t)0;
   TpaData.nonce_blob.size = sizeof nonce;
   memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
 
@@ -186,7 +186,6 @@ void waitRARequest(char *nonce)
 
 int sendDataToRA(TO_SEND TpaData)
 {
-
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -214,20 +213,35 @@ int sendDataToRA(TO_SEND TpaData)
   /** NO NEED TO SEND BACK THE NONCE SINCE THE RA WILL USE THE NONCE HE GENERATED FOR THIS REQUEST
    *  ALSO IMPORTANT BECAUSE IT AVOIDS REPLAY ATTACKS IF THE RA DOES NOT DO ANY CHECKS ON THE FRESHNESS
    *  OF THE JUST RECEIVED NONCE
-  */
+   */
 
   ssize_t sentBytes = send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), 0);
   sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count, 0);
-  sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST)*TpaData.pcrs_blob.pcrs.count, 0);
+  sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count, 0);
 
   sentBytes += send(sock, &TpaData.sig_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.sig_blob.size, sizeof(u_int16_t), 0);
-  sentBytes += send(sock, &TpaData.sig_blob.buffer, sizeof(u_int8_t)*TpaData.sig_blob.size, 0);
+  sentBytes += send(sock, &TpaData.sig_blob.buffer, sizeof(u_int8_t) * TpaData.sig_blob.size, 0);
 
   sentBytes += send(sock, &TpaData.message_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.message_blob.size, sizeof(u_int16_t), 0);
-  sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t)*TpaData.message_blob.size, 0);
+  sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t) * TpaData.message_blob.size, 0);
+
+  sentBytes += send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes += send(sock, &TpaData.ima_log_blob.size, sizeof(u_int16_t), 0);
+
+  /*for (i = 0; i < TpaData.ima_log_blob.size; i++)
+  {
+    // send header
+    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].header, sizeof TpaData.ima_log_blob.logEntry[i].header, 0);
+    // send name
+    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].name, TpaData.ima_log_blob.logEntry[i].header.name_len * sizeof(char), 0);
+    // send template data len
+    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t), 0);
+    // send template data
+    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].template_data, TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t), 0);
+  }*/
 
   fprintf(stdout, "sentBytes = %d\n", sentBytes);
   return sentBytes;

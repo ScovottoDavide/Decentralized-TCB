@@ -49,8 +49,6 @@ int main(int argc, char const *argv[])
     return -1;
   }
 
-retry:
-
   if (!RAND_bytes(TpaData.nonce_blob.buffer, NONCE_LEN))
   {
     return -1;
@@ -83,7 +81,7 @@ retry:
   fprintf(stdout, "PCR9 verfication successfull!!!!\n");
 
   // PCR10 verification in whitelist verify
-  verify_PCR10_whitelist(pcr10_sha1.buffer, pcr10_sha256.buffer);
+  verify_PCR10_whitelist(pcr10_sha1.buffer, pcr10_sha256.buffer, TpaData.ima_log_blob);
 
   return 0;
 }
@@ -140,7 +138,8 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  if(TpaData->pcrs_blob.tag != 3){
+  if (TpaData->pcrs_blob.tag != 3)
+  {
     fprintf(stdout, "Wrong tag received for the pcrs!\n");
     exit(EXIT_FAILURE);
   }
@@ -176,7 +175,8 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  if(TpaData->sig_blob.tag != 1){
+  if (TpaData->sig_blob.tag != 1)
+  {
     fprintf(stdout, "Wrong tag received for the signature!\n");
     exit(EXIT_FAILURE);
   }
@@ -213,7 +213,8 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  if(TpaData->message_blob.tag != 2){
+  if (TpaData->message_blob.tag != 2)
+  {
     fprintf(stdout, "Wrong tag received for the quote!\n");
     exit(EXIT_FAILURE);
   }
@@ -240,6 +241,62 @@ void waitTPAData(TO_SEND *TpaData)
   }
   fprintf(stdout, "\n");
   /** END OF READING QUOTE */
+
+  /** READ IMA LOG */
+  valread = read(new_socket, &TpaData->ima_log_blob.tag, sizeof(u_int8_t));
+  if (valread < 0 || valread > sizeof(u_int8_t))
+  {
+    fprintf(stdout, "Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  if (TpaData->ima_log_blob.tag != 4)
+  {
+    fprintf(stdout, "Wrong tag received for the quote!\n");
+    exit(EXIT_FAILURE);
+  }
+  valread = read(new_socket, &TpaData->ima_log_blob.size, sizeof(u_int16_t));
+  if (valread < 0 || valread > sizeof(u_int16_t))
+  {
+    fprintf(stdout, "Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  /*TpaData->ima_log_blob.logEntry = malloc(TpaData->ima_log_blob.size * sizeof(struct event));
+  for (i = 0; i < TpaData->ima_log_blob.size; i++)
+  {
+    valread = read(new_socket, &TpaData->ima_log_blob.logEntry[i].header, sizeof TpaData->ima_log_blob.logEntry[i].header);
+        if (valread < 0 || valread > sizeof TpaData->ima_log_blob.logEntry[i].header)
+    {
+      fprintf(stdout, "Error while reading through socket!\n");
+      exit(EXIT_FAILURE);
+    }
+    valread = read(new_socket, &TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].header.name_len*sizeof(char));
+    if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].header.name_len*sizeof(char))
+    {
+      fprintf(stdout, "Error while reading through socket!\n");
+      exit(EXIT_FAILURE);
+    }
+    valread = read(new_socket, &TpaData->ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t));
+    if (valread < 0 || valread > sizeof(u_int32_t))
+    {
+      fprintf(stdout, "Error while reading through socket!\n");
+      exit(EXIT_FAILURE);
+    }
+    
+    TpaData->ima_log_blob.logEntry[i].template_data = malloc(TpaData->ima_log_blob.logEntry[i].template_data_len*sizeof(u_int8_t));
+    valread = read(new_socket, TpaData->ima_log_blob.logEntry[i].template_data, TpaData->ima_log_blob.logEntry[i].template_data_len*sizeof(u_int8_t));
+    if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].template_data_len*sizeof(u_int8_t))
+    {
+      fprintf(stdout, "Error while reading through socket!\n");
+      exit(EXIT_FAILURE);
+    }
+    fprintf(stdout, "%c%s%c", TpaData->ima_log_blob.logEntry[i].header.pcr, TpaData->ima_log_blob.logEntry[i].header.digest, TpaData->ima_log_blob.logEntry[i].header.name_len);
+    fprintf(stdout, "%s%c", TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].template_data_len);
+    for(int j = 0; j< TpaData->ima_log_blob.logEntry[i].template_data_len; j++){
+      fprintf(stdout, "%c", TpaData->ima_log_blob.logEntry[i].template_data[j]);
+    }*/
+    //fprintf(stdout, "\n");
+  //}
+  /** END OF READ IMA LOG */
 }
 
 bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id)

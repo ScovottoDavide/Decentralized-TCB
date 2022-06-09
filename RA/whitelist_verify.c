@@ -5,7 +5,7 @@ int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
-
+ 
   OpenSSL_add_all_digests();
 
   md = EVP_get_digestbyname(sha_alg);
@@ -81,8 +81,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
 {
   int len, is_ima_template, is_imang_template, i, k = 0;
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
-
-  u_int8_t *entry_aggregate; 
+  u_int8_t *entry_aggregate = NULL; 
   u_int8_t *currentTemplateMD = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
   u_int8_t acc = 0;
 
@@ -112,7 +111,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
   }
 
   template->template_data = calloc(template->template_data_len, sizeof(u_int8_t));
-  entry_aggregate = calloc(template->template_data_len, sizeof(u_int8_t));
+  entry_aggregate = calloc(template->template_data_len+1, sizeof(u_int8_t));
 
   if (template->template_data == NULL)
   {
@@ -120,15 +119,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
     return -1;
   }
 
-  if (is_ima_template)
-  { /* finish 'ima' template data read */
-    u_int32_t field_len;
-    fread(template->template_data, len, 1, fp);
-
-    fread(&field_len, sizeof(u_int32_t), 1, fp);
-    fread(template->template_data + SHA_DIGEST_LENGTH, field_len, 1, fp);
-  }
-  else if (is_imang_template)
+  if (is_imang_template)
   { /* finish 'ima-ng' template data read */
     u_int32_t field_len;
     u_int32_t field_path_len;
@@ -139,11 +130,13 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
     int is_sha1 = 0;
 
     fread(&field_len, sizeof(u_int32_t), 1, fp); /* d-ng:[uint32 little endian hash len]* */
+    //memcpy(&field_len, template->template_data, sizeof(u_int32_t));
     memcpy(entry_aggregate + acc, &field_len, sizeof field_len);
     acc += sizeof field_len;
     if (field_len != 0x28)
     {
       fread(alg_sha1_field, sizeof(u_int8_t), 6, fp);
+      //memcpy(alg_sha1_field, template->template_data + acc, sizeof alg_field);
       memcpy(entry_aggregate + acc, alg_field, sizeof alg_field);
       acc += sizeof alg_field;
       is_sha1 = 1;
@@ -156,6 +149,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
     else
     {
       fread(alg_field, sizeof(u_int8_t), 8, fp);
+      //memcpy(alg_field, template->template_data + acc, sizeof(u_int8_t)*8);
       memcpy(entry_aggregate + acc, alg_field, sizeof alg_field);
       acc += sizeof alg_field;
       fread(template->template_data, sizeof(u_int8_t), SHA256_DIGEST_LENGTH, fp); /* [file hash] */
@@ -164,15 +158,17 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
     }
 
     fread(&field_path_len, sizeof field_path_len, 1, fp); /* n-ng:[uint32 little endian path len] */
+    //memcpy(&field_path_len, template->template_data + acc, sizeof field_path_len);
     memcpy(entry_aggregate + acc, &field_path_len, sizeof field_path_len);
     acc += sizeof field_path_len;
 
     path_field = malloc(field_path_len * sizeof(u_int8_t));
 
     fread(path_field, sizeof(u_int8_t), field_path_len, fp); /* [file hash] */
+    //memcpy(path_field, template->template_data + acc, sizeof(u_int8_t) * field_path_len);
     memcpy(entry_aggregate + acc, path_field, field_path_len);
     acc += sizeof path_field; 
-
+    
     int mdTemplate;
     if(!is_sha1)
       mdTemplate = computeTemplateDigest(entry_aggregate, "sha256", &currentTemplateMD, template->template_data_len);
@@ -214,7 +210,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
   return 0;
 }
 
-int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
+int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG_BLOB ima_log_blob)
 {
   struct event template;
   struct whitelist_entry *white_entries;
@@ -266,6 +262,26 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
       exit(-1);
     }
   }
+  /*fprintf(stdout, "size=%d\n", ima_log_blob.size);
+  for(i = 0; i < ima_log_blob.size; i++) {
+    for(int j = 0; j< ima_log_blob.logEntry[i].template_data_len; j++){
+      fprintf(stdout, "%c", ima_log_blob.logEntry[i].template_data[j]);
+    }
+    fprintf(stdout, "\n");*/
+    /*if(ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX){
+      printf("%d ERROR: event name too long!\n", template.header.name_len);
+      free(pcr_aggr);
+      free(white_entries);
+      fclose(whitelist_fp);
+      exit(-1);
+    }
+  
+    if (read_template_data(&ima_log_blob.logEntry[i], ima_fp, white_entries, num_entries, pcr_aggr) == -1)
+    {
+      printf("\nReading of measurement entry failed\n");
+      exit(-1);
+    }*/
+  //}
   
   fprintf(stdout, "PCRAggr : ");
   for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
@@ -277,6 +293,8 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256)
   }else {
     fprintf(stdout, "PCR10 verification failed!\n");
   }
+
+  free(pcr_aggr);
 
   fclose(ima_fp);
   fclose(whitelist_fp);
