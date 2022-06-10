@@ -33,3 +33,5 @@ SHOULD be included as part of the associated EK Template NV Index.
   Populated at an even handle value, and (if present) an EK Template is Populated
   at the subsequent odd handle value.
 ```
+   ![Cattura](https://user-images.githubusercontent.com/79461717/173041195-a53736f5-2243-4ec4-ae74-1079533bc63d.PNG)
+
