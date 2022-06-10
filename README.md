@@ -3,7 +3,7 @@
 EK Profile 
 https://trustedcomputinggroup.org/wp-content/uploads/TCG_IWG_EKCredentialProfile_v2p4_r3.pdf
 
-2.2.1.4 Low Range
+### 2.2.1.4 Low Range
 
 `
 The Low Range is at NV Indices 0x01c00002 - 0x01c0000c.
