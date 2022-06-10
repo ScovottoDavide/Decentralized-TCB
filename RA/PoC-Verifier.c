@@ -260,17 +260,17 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  /*TpaData->ima_log_blob.logEntry = malloc(TpaData->ima_log_blob.size * sizeof(struct event));
+  TpaData->ima_log_blob.logEntry = malloc(TpaData->ima_log_blob.size * sizeof(struct event));
   for (i = 0; i < TpaData->ima_log_blob.size; i++)
   {
     valread = read(new_socket, &TpaData->ima_log_blob.logEntry[i].header, sizeof TpaData->ima_log_blob.logEntry[i].header);
-        if (valread < 0 || valread > sizeof TpaData->ima_log_blob.logEntry[i].header)
+    if (valread < 0 || valread > sizeof TpaData->ima_log_blob.logEntry[i].header)
     {
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
-    valread = read(new_socket, &TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].header.name_len*sizeof(char));
-    if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].header.name_len*sizeof(char))
+    valread = read(new_socket, TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char));
+    if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char))
     {
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
@@ -281,21 +281,22 @@ void waitTPAData(TO_SEND *TpaData)
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
-    
-    TpaData->ima_log_blob.logEntry[i].template_data = malloc(TpaData->ima_log_blob.logEntry[i].template_data_len*sizeof(u_int8_t));
-    valread = read(new_socket, TpaData->ima_log_blob.logEntry[i].template_data, TpaData->ima_log_blob.logEntry[i].template_data_len*sizeof(u_int8_t));
-    if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].template_data_len*sizeof(u_int8_t))
+
+    TpaData->ima_log_blob.logEntry[i].template_data = malloc(TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
+    valread = read(new_socket, TpaData->ima_log_blob.logEntry[i].template_data, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
+    if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t))
     {
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
-    fprintf(stdout, "%c%s%c", TpaData->ima_log_blob.logEntry[i].header.pcr, TpaData->ima_log_blob.logEntry[i].header.digest, TpaData->ima_log_blob.logEntry[i].header.name_len);
-    fprintf(stdout, "%s%c", TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].template_data_len);
-    for(int j = 0; j< TpaData->ima_log_blob.logEntry[i].template_data_len; j++){
+    // fprintf(stdout, "%c%s%c", TpaData->ima_log_blob.logEntry[i].header.pcr, TpaData->ima_log_blob.logEntry[i].header.digest, TpaData->ima_log_blob.logEntry[i].header.name_len);
+    // fprintf(stdout, "%s %d", TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].template_data_len);
+    /*for (int j = 0; j < TpaData->ima_log_blob.logEntry[i].template_data_len; j++)
+    {
       fprintf(stdout, "%c", TpaData->ima_log_blob.logEntry[i].template_data[j]);
-    }*/
-    //fprintf(stdout, "\n");
-  //}
+    }
+    fprintf(stdout, "\n");*/
+  }
   /** END OF READ IMA LOG */
 }
 

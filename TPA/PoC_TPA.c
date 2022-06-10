@@ -188,6 +188,8 @@ int sendDataToRA(TO_SEND TpaData)
 {
   int sock = 0, valread, i;
   struct sockaddr_in serv_addr;
+  ssize_t sentBytes = 0;
+
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
     printf("\n Socket creation error \n");
@@ -215,7 +217,7 @@ int sendDataToRA(TO_SEND TpaData)
    *  OF THE JUST RECEIVED NONCE
    */
 
-  ssize_t sentBytes = send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes += send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), 0);
   sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count, 0);
   sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count, 0);
@@ -228,10 +230,10 @@ int sendDataToRA(TO_SEND TpaData)
   sentBytes += send(sock, &TpaData.message_blob.size, sizeof(u_int16_t), 0);
   sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t) * TpaData.message_blob.size, 0);
 
-  sentBytes += send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes = send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.ima_log_blob.size, sizeof(u_int16_t), 0);
 
-  /*for (i = 0; i < TpaData.ima_log_blob.size; i++)
+  for (i = 0; i < TpaData.ima_log_blob.size; i++)
   {
     // send header
     sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].header, sizeof TpaData.ima_log_blob.logEntry[i].header, 0);
@@ -241,7 +243,7 @@ int sendDataToRA(TO_SEND TpaData)
     sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t), 0);
     // send template data
     sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].template_data, TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t), 0);
-  }*/
+  }
 
   fprintf(stdout, "sentBytes = %d\n", sentBytes);
   return sentBytes;

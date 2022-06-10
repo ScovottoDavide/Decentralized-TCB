@@ -77,7 +77,7 @@ int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, co
   return -1;
 }
 
-static int read_template_data(struct event *template, FILE *fp, const struct whitelist_entry *white_entries, int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH + 1])
+static int read_template_data(struct event *template, const struct whitelist_entry *white_entries, int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH + 1])
 {
   int len, is_ima_template, is_imang_template, i, k = 0;
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
@@ -94,12 +94,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
   is_ima_template = strcmp(template->name, "ima") == 0 ? 1 : 0;
   is_imang_template = strcmp(template->name, "ima-ng") == 0 ? 1 : 0;
 
-  if (!is_ima_template)
-  {
-    fread(&template->template_data_len, sizeof(u_int32_t), 1, fp);
-    len = template->template_data_len;
-  }
-  else
+  if (is_ima_template)
   {
     template->template_data_len = SHA_DIGEST_LENGTH +
                                   TCG_EVENT_NAME_LEN_MAX + 1;
@@ -110,14 +105,7 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
     len = SHA_DIGEST_LENGTH;
   }
 
-  template->template_data = calloc(template->template_data_len, sizeof(u_int8_t));
   entry_aggregate = calloc(template->template_data_len+1, sizeof(u_int8_t));
-
-  if (template->template_data == NULL)
-  {
-    printf("ERROR: out of memory\n");
-    return -1;
-  }
 
   if (is_imang_template)
   { /* finish 'ima-ng' template data read */
@@ -129,43 +117,37 @@ static int read_template_data(struct event *template, FILE *fp, const struct whi
 
     int is_sha1 = 0;
 
-    fread(&field_len, sizeof(u_int32_t), 1, fp); /* d-ng:[uint32 little endian hash len]* */
-    //memcpy(&field_len, template->template_data, sizeof(u_int32_t));
+    memcpy(&field_len, template->template_data, sizeof(u_int32_t));
     memcpy(entry_aggregate + acc, &field_len, sizeof field_len);
     acc += sizeof field_len;
     if (field_len != 0x28)
     {
-      fread(alg_sha1_field, sizeof(u_int8_t), 6, fp);
-      //memcpy(alg_sha1_field, template->template_data + acc, sizeof alg_field);
-      memcpy(entry_aggregate + acc, alg_field, sizeof alg_field);
-      acc += sizeof alg_field;
+      memcpy(alg_sha1_field, template->template_data + acc, sizeof alg_sha1_field);
+      memcpy(entry_aggregate + acc, alg_sha1_field, sizeof alg_sha1_field);
+      acc += sizeof alg_sha1_field;
       is_sha1 = 1;
       /* Here if it's a sha1 then is a violation because i'm using ima.ng sha256 */
-      fread(template->template_data, sizeof(u_int8_t), SHA_DIGEST_LENGTH, fp); /* [file hash] */
       /* If violation --> 0xff instead of leaving 0x00 */
       memset(entry_aggregate + acc, 0xff, SHA_DIGEST_LENGTH);
       acc += SHA_DIGEST_LENGTH;
     }
     else
     {
-      fread(alg_field, sizeof(u_int8_t), 8, fp);
-      //memcpy(alg_field, template->template_data + acc, sizeof(u_int8_t)*8);
+      memcpy(alg_field, template->template_data + acc, sizeof(u_int8_t)*8);
       memcpy(entry_aggregate + acc, alg_field, sizeof alg_field);
       acc += sizeof alg_field;
-      fread(template->template_data, sizeof(u_int8_t), SHA256_DIGEST_LENGTH, fp); /* [file hash] */
-      memcpy(entry_aggregate + acc, template->template_data, SHA256_DIGEST_LENGTH);
+      
+      memcpy(entry_aggregate + acc, template->template_data + acc, SHA256_DIGEST_LENGTH);
       acc += SHA256_DIGEST_LENGTH;
     }
 
-    fread(&field_path_len, sizeof field_path_len, 1, fp); /* n-ng:[uint32 little endian path len] */
-    //memcpy(&field_path_len, template->template_data + acc, sizeof field_path_len);
+    memcpy(&field_path_len, template->template_data + acc, sizeof field_path_len); /* n-ng:[uint32 little endian path len] */
     memcpy(entry_aggregate + acc, &field_path_len, sizeof field_path_len);
     acc += sizeof field_path_len;
 
     path_field = malloc(field_path_len * sizeof(u_int8_t));
 
-    fread(path_field, sizeof(u_int8_t), field_path_len, fp); /* [file hash] */
-    //memcpy(path_field, template->template_data + acc, sizeof(u_int8_t) * field_path_len);
+    memcpy(path_field, template->template_data + acc, sizeof(u_int8_t) * field_path_len); /* [file hash] */
     memcpy(entry_aggregate + acc, path_field, field_path_len);
     acc += sizeof path_field; 
     
@@ -214,15 +196,8 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG
 {
   struct event template;
   struct whitelist_entry *white_entries;
-  FILE *ima_fp, *whitelist_fp;
+  FILE *whitelist_fp;
   int num_entries = 0, i;
-
-  ima_fp = fopen("/etc/tc/IMA_LOG_OUT", "rb");
-  if (!ima_fp)
-  {
-    fprintf(stdout, "Could not open IMA_LOG\n");
-    exit(-1);
-  }
 
   whitelist_fp = fopen("whitelist", "rb");
   if (!whitelist_fp)
@@ -244,45 +219,23 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG
   }
 
   loadWhitelist(whitelist_fp, white_entries, num_entries);
-  while (fread(&template.header, sizeof template.header, 1, ima_fp))
-  {
-    if (template.header.name_len > TCG_EVENT_NAME_LEN_MAX)
-    {
-      printf("%d ERROR: event name too long!\n", template.header.name_len);
-      fclose(ima_fp);
-      fclose(whitelist_fp);
-      exit(-1);
-    }
-    memset(template.name, 0, sizeof template.name);
-    fread(template.name, template.header.name_len, 1, ima_fp);
-
-    if (read_template_data(&template, ima_fp, white_entries, num_entries, pcr_aggr) == -1)
-    {
-      printf("\nReading of measurement entry failed\n");
-      exit(-1);
-    }
-  }
-  /*fprintf(stdout, "size=%d\n", ima_log_blob.size);
+  
   for(i = 0; i < ima_log_blob.size; i++) {
-    for(int j = 0; j< ima_log_blob.logEntry[i].template_data_len; j++){
-      fprintf(stdout, "%c", ima_log_blob.logEntry[i].template_data[j]);
-    }
-    fprintf(stdout, "\n");*/
-    /*if(ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX){
-      printf("%d ERROR: event name too long!\n", template.header.name_len);
+    if(ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX){
+      fprintf(stdout, "%d ERROR: event name too long!\n", template.header.name_len);
       free(pcr_aggr);
       free(white_entries);
       fclose(whitelist_fp);
       exit(-1);
     }
   
-    if (read_template_data(&ima_log_blob.logEntry[i], ima_fp, white_entries, num_entries, pcr_aggr) == -1)
+    if (read_template_data(&ima_log_blob.logEntry[i], white_entries, num_entries, pcr_aggr) == -1)
     {
       printf("\nReading of measurement entry failed\n");
       exit(-1);
-    }*/
-  //}
-  
+    }
+  }
+
   fprintf(stdout, "PCRAggr : ");
   for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
     fprintf(stdout, "%02X", pcr_aggr[i]);
@@ -296,7 +249,6 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG
 
   free(pcr_aggr);
 
-  fclose(ima_fp);
   fclose(whitelist_fp);
 
   return 0;
