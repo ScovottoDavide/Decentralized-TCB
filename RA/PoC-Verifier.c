@@ -163,9 +163,6 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  // fprintf(stdout, "PCRS \n");
-  // fprintf(stdout, "%d\n", TpaData->pcrs_blob.tag);
-  // pcr_print(&TpaData->pcrs_blob.pcr_selection, &TpaData->pcrs_blob.pcrs);
   /** END OF READING PCRS */
 
   /** READ SIGNATURE FROM SOCKET */
@@ -195,15 +192,6 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-
-  fprintf(stdout, "SIGNATURE \n");
-  fprintf(stdout, "%d \n", TpaData->sig_blob.tag);
-  fprintf(stdout, "%d \n", TpaData->sig_blob.size);
-  for (i = 0; i < TpaData->sig_blob.size; i++)
-  {
-    fprintf(stdout, "%02x", TpaData->sig_blob.buffer[i]);
-  }
-  fprintf(stdout, "\n");
   /** END OF READING SIGNATURE */
 
   /** READ QUOTE FROM SOCKET */
@@ -232,14 +220,6 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
-  fprintf(stdout, "QUOTE \n");
-  fprintf(stdout, "%d \n", TpaData->message_blob.tag);
-  fprintf(stdout, "%d \n", TpaData->message_blob.size);
-  for (i = 0; i < TpaData->message_blob.size; i++)
-  {
-    fprintf(stdout, "%02x", TpaData->message_blob.buffer[i]);
-  }
-  fprintf(stdout, "\n");
   /** END OF READING QUOTE */
 
   /** READ IMA LOG */
@@ -289,13 +269,6 @@ void waitTPAData(TO_SEND *TpaData)
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
-    // fprintf(stdout, "%c%s%c", TpaData->ima_log_blob.logEntry[i].header.pcr, TpaData->ima_log_blob.logEntry[i].header.digest, TpaData->ima_log_blob.logEntry[i].header.name_len);
-    // fprintf(stdout, "%s %d", TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].template_data_len);
-    /*for (int j = 0; j < TpaData->ima_log_blob.logEntry[i].template_data_len; j++)
-    {
-      fprintf(stdout, "%c", TpaData->ima_log_blob.logEntry[i].template_data[j]);
-    }
-    fprintf(stdout, "\n");*/
   }
   /** END OF READ IMA LOG */
 }
