@@ -230,7 +230,7 @@ int sendDataToRA(TO_SEND TpaData)
   sentBytes += send(sock, &TpaData.message_blob.size, sizeof(u_int16_t), 0);
   sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t) * TpaData.message_blob.size, 0);
 
-  sentBytes = send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
+  sentBytes += send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
   sentBytes += send(sock, &TpaData.ima_log_blob.size, sizeof(u_int16_t), 0);
 
   for (i = 0; i < TpaData.ima_log_blob.size; i++)
