@@ -83,7 +83,7 @@ static int read_template_data(struct event *template, const struct whitelist_ent
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
   u_int8_t *entry_aggregate = NULL;
   u_int8_t *currentTemplateMD = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
-  u_int8_t currentEntryFileHash[SHA256_DIGEST_LENGTH + 1] = { 0 };
+  u_int8_t currentEntryFileHash[SHA256_DIGEST_LENGTH + 1] = {0};
   u_int8_t acc = 0;
 
   /* Init empty pcr */
@@ -127,9 +127,9 @@ static int read_template_data(struct event *template, const struct whitelist_ent
       memcpy(entry_aggregate + acc, alg_sha1_field, sizeof alg_sha1_field);
       acc += sizeof alg_sha1_field;
       is_sha1 = 1;
-      /* Here if it's a sha1 then is a violation because i'm using ima-ng sha256 */
-      /* If violation --> 0xff instead of leaving 0x00 */
-      memset(entry_aggregate + acc, 0xff, SHA256_DIGEST_LENGTH); // bank I'm checking is SHA256 BANK
+      
+      /** This actually useless */ 
+      memset(entry_aggregate + acc, 0xff, SHA_DIGEST_LENGTH); // bank I'm checking is SHA256 BANK
       acc += SHA_DIGEST_LENGTH;
     }
     else
@@ -155,15 +155,27 @@ static int read_template_data(struct event *template, const struct whitelist_ent
     acc += sizeof path_field;
 
     int mdTemplate;
-    //if (!is_sha1)
+    if (!is_sha1)
       mdTemplate = computeTemplateDigest(entry_aggregate, "sha256", &currentTemplateMD, template->template_data_len);
 
-    k = SHA256_DIGEST_LENGTH;
-    for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
+    int mdPCR;
+    if (!is_sha1)
     {
-      pcr_concatenated[k++] = currentTemplateMD[i];
+      k = SHA256_DIGEST_LENGTH;
+      for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
+      {
+        pcr_concatenated[k++] = currentTemplateMD[i];
+      }
+      mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH * 2);
     }
-    int mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH * 2);
+    else
+    {
+      /* Here if it's a sha1 then is a violation because i'm using ima-ng sha256 */
+      /* If violation --> 0xff instead of leaving 0x00 */
+      k = SHA256_DIGEST_LENGTH;
+      memset(pcr_concatenated + k, 0xff, SHA256_DIGEST_LENGTH);
+      mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH * 2);
+    }
 
     if (white_entries != NULL)
     {
@@ -262,7 +274,7 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG
 
   free(pcr_aggr);
 
-  if(whitelist_fp != NULL)
+  if (whitelist_fp != NULL)
     fclose(whitelist_fp);
 
   return 0;

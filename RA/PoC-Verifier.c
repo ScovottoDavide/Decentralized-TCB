@@ -266,7 +266,7 @@ void waitTPAData(TO_SEND *TpaData)
     valread = read(new_socket, TpaData->ima_log_blob.logEntry[i].template_data, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
     if (valread < 0 || valread > TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t))
     {
-      fprintf(stdout, "Error while reading through socket!\n");
+      fprintf(stdout, "Error while reading through socket 111!\n");
       exit(EXIT_FAILURE);
     }
   }
