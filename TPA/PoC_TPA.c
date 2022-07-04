@@ -17,7 +17,7 @@
 #define PORT_SEND 8081
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
-int sendDataToRA(TO_SEND TpaData);
+int sendDataToRA(TO_SEND TpaData, ssize_t *imaLogBytesSize);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 
 int main()
@@ -35,6 +35,8 @@ int main()
   struct sockaddr_in address;
   int opt = 1;
   int addrlen = sizeof(address);
+
+  ssize_t imaLogBytesSize = 0;
 
   // Creating socket file descriptor
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
@@ -77,74 +79,74 @@ int main()
     }
     nonce[32] = '\0';
 
-  TpaData.nonce_blob.tag = (u_int8_t)0;
-  TpaData.nonce_blob.size = sizeof nonce;
-  memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
+    TpaData.nonce_blob.tag = (u_int8_t)0;
+    TpaData.nonce_blob.size = sizeof nonce;
+    memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
 
-  tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
-    printf("Could not initialize tcti context\n");
-    exit(-1);
-  }
+    tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
+    if (tss_r != TSS2_RC_SUCCESS)
+    {
+      printf("Could not initialize tcti context\n");
+      exit(-1);
+    }
 
-  tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
-    printf("Could not initialize esys context\n");
-    exit(-1);
-  }
-  /**
+    tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
+    if (tss_r != TSS2_RC_SUCCESS)
+    {
+      printf("Could not initialize esys context\n");
+      exit(-1);
+    }
+    /**
     Assumption: Ek is at NV-Index 0x80000000, AK is at NV-Index 0x80000001
     and they are the only persistent handles in NV-RAM.
     See if optimizable!
-  **/
-  // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
-  persistent_handles = tpm2_getCap_handles_persistent(esys_context);
-  if (persistent_handles < 0)
-  {
-    printf("Error while reading persistent handles!\n");
-    exit(-1);
-  }
-
-  if (!persistent_handles)
-  {
-    fprintf(stdout, "Generating EK...\n");
-    tss_r = tpm2_createek(esys_context);
-    if (tss_r != TSS2_RC_SUCCESS)
+    **/
+    // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
+    persistent_handles = tpm2_getCap_handles_persistent(esys_context);
+    if (persistent_handles < 0)
     {
-      printf("Error in tpm2_createek\n");
+      printf("Error while reading persistent handles!\n");
       exit(-1);
     }
 
-    fprintf(stdout, "Generating AK...\n");
-    tss_r = tpm2_createak(esys_context);
+    if (!persistent_handles)
+    {
+      fprintf(stdout, "Generating EK...\n");
+      tss_r = tpm2_createek(esys_context);
+      if (tss_r != TSS2_RC_SUCCESS)
+      {
+        printf("Error in tpm2_createek\n");
+        exit(-1);
+      }
+
+      fprintf(stdout, "Generating AK...\n");
+      tss_r = tpm2_createak(esys_context);
+      if (tss_r != TSS2_RC_SUCCESS)
+      {
+        printf("\tError creating AK\n");
+        exit(-1);
+      }
+
+      tpm2_getCap_handles_persistent(esys_context);
+    }
+
+    if (pcr_check_if_zeros(esys_context))
+    {
+      // Extend both
+      ExtendPCR9(esys_context, "sha1");
+      ExtendPCR9(esys_context, "sha256");
+    }
+
+    tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize);
     if (tss_r != TSS2_RC_SUCCESS)
     {
-      printf("\tError creating AK\n");
+      printf("Error while computing quote!\n");
       exit(-1);
     }
 
-    tpm2_getCap_handles_persistent(esys_context);
+    /** SEND DATA TO THE REMOTE ATTESTOR */
+    sendDataToRA(TpaData, &imaLogBytesSize);
   }
-
-  if (pcr_check_if_zeros(esys_context))
-  {
-    // Extend both
-    ExtendPCR9(esys_context, "sha1");
-    ExtendPCR9(esys_context, "sha256");
-  }
-
-  tss_r = tpm2_quote(esys_context, &TpaData);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
-    printf("Error while computing quote!\n");
-    exit(-1);
-  }
-
-  /** SEND DATA TO THE REMOTE ATTESTOR */
-  sendDataToRA(TpaData);
-}
 
   close(server_fd);
   close(new_socket);
@@ -165,163 +167,172 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
 
   printf("\nReading persistent handles!\n");
   tss_r = Esys_GetCapability(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
-                             ESYS_TR_NONE, capability, property,
-                             propertyCount, &moreData, &capabilityData);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
-    printf("Error while reading persistent handles\n");
-    return -1;
-  }
-  int i = 0;
-  printf("Persistent handles present in NVRAM are %d\n", capabilityData->data.handles.count);
-  for (i = 0; i < capabilityData->data.handles.count; i++)
-  {
-    printf("Persistent Handle: 0x%X\n", capabilityData->data.handles.handle[i]);
-  }
-  return capabilityData->data.handles.count;
-}
-
-int sendDataToRA(TO_SEND TpaData)
-{
-  int sock = 0, valread, i;
-  struct sockaddr_in serv_addr;
-  ssize_t sentBytes = 0;
-
-  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-  {
-    printf("\n Socket creation error \n");
-    return -1;
-  }
-
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(PORT_SEND);
-
-  // Convert IPv4 and IPv6 addresses from text to binary form
-  if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
-  {
-    printf("\nInvalid address/ Address not supported \n");
-    return -1;
-  }
-
-  if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-  {
-    printf("\nConnection Failed \n");
-    return -1;
-  }
-
-  /** NO NEED TO SEND BACK THE NONCE SINCE THE RA WILL USE THE NONCE HE GENERATED FOR THIS REQUEST
-   *  ALSO IMPORTANT BECAUSE IT AVOIDS REPLAY ATTACKS IF THE RA DOES NOT DO ANY CHECKS ON THE FRESHNESS
-   *  OF THE JUST RECEIVED NONCE
-   */
-
-  sentBytes += send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
-  sentBytes += send(sock, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), 0);
-  sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count, 0);
-  sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count, 0);
-
-  sentBytes += send(sock, &TpaData.sig_blob.tag, sizeof(u_int8_t), 0);
-  sentBytes += send(sock, &TpaData.sig_blob.size, sizeof(u_int16_t), 0);
-  sentBytes += send(sock, &TpaData.sig_blob.buffer, sizeof(u_int8_t) * TpaData.sig_blob.size, 0);
-
-  sentBytes += send(sock, &TpaData.message_blob.tag, sizeof(u_int8_t), 0);
-  sentBytes += send(sock, &TpaData.message_blob.size, sizeof(u_int16_t), 0);
-  sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t) * TpaData.message_blob.size, 0);
-
-  sentBytes += send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
-  sentBytes += send(sock, &TpaData.ima_log_blob.size, sizeof(u_int16_t), 0);
-
-  for (i = 0; i < TpaData.ima_log_blob.size; i++)
-  {
-    // send header
-    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].header, sizeof TpaData.ima_log_blob.logEntry[i].header, 0);
-    // send name
-    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].name, TpaData.ima_log_blob.logEntry[i].header.name_len * sizeof(char), 0);
-    // send template data len
-    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t), 0);
-    // send template data
-    sentBytes += send(sock, &TpaData.ima_log_blob.logEntry[i].template_data, TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t), 0);
-  }
-
-  fprintf(stdout, "sentBytes = %d\n", sentBytes);
-  return sentBytes;
-}
-
-bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context)
-{
-  UINT32 i;
-  size_t vi = 0; /* value index */
-  UINT32 di = 0; /* digest index */
-  u_int8_t pcr_max[SHA256_DIGEST_LENGTH];
-  TSS2_RC tss_r;
-
-  memset(pcr_max, 0, SHA256_DIGEST_LENGTH); /* initial PCR9-sha256 (is the max) content 0..0 */
-
-  // Prepare TPML_PCR_SELECTION to read only PCR9
-  // If PCR9 (sha1+sha256) are already extended, do NOT extend them more otherwise it's not possible to check its integrity
-  TPML_PCR_SELECTION pcr_select;
-  tpm2_pcrs pcrs;
-  bool res = pcr_parse_selections("sha1:9+sha256:9", &pcr_select);
-  if (!res)
-    return false;
-
-  tss_r = pcr_read_pcr_values(esys_context, &pcr_select, &pcrs);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
-    fprintf(stderr, "Error while reading PCRs from TPM\n");
-    return false;
-  }
-
-  // Go through all PCRs in each bank
-  for (i = 0; i < pcr_select.count; i++)
-  {
-    const char *alg_name;
-    if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1)
+    ESYS_TR_NONE, capability, property,
+    propertyCount, &moreData, &capabilityData);
+    if (tss_r != TSS2_RC_SUCCESS)
     {
-      alg_name = malloc(strlen("sha1") * sizeof(char));
-      alg_name = "sha1";
+      printf("Error while reading persistent handles\n");
+      return -1;
     }
-    else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256)
+    int i = 0;
+    printf("Persistent handles present in NVRAM are %d\n", capabilityData->data.handles.count);
+    for (i = 0; i < capabilityData->data.handles.count; i++)
     {
-      alg_name = malloc(strlen("sha256") * sizeof(char));
-      alg_name = "sha256";
+      printf("Persistent Handle: 0x%X\n", capabilityData->data.handles.handle[i]);
+    }
+    return capabilityData->data.handles.count;
+  }
+
+  int sendDataToRA(TO_SEND TpaData, ssize_t *imaLogBytesSize)
+  {
+    int sock = 0, valread, i;
+    struct sockaddr_in serv_addr;
+    ssize_t sentBytes = 0, tmp = 0;
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+      printf("\n Socket creation error \n");
+      return -1;
     }
 
-    // Go through all PCRs in this banks
-    unsigned int pcr_id;
-    for (pcr_id = 0; pcr_id < pcr_select.pcrSelections[i].sizeofSelect * 8u; pcr_id++)
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT_SEND);
+
+    // Convert IPv4 and IPv6 addresses from text to binary form
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
     {
-      // skip unset pcrs (bit = 0)
-      if (!(pcr_select.pcrSelections[i].pcrSelect[((pcr_id) / 8)] & (1 << ((pcr_id) % 8))))
-      {
-        continue;
-      }
+      printf("\nInvalid address/ Address not supported \n");
+      return -1;
+    }
 
-      if (vi >= pcrs.count || di >= pcrs.pcr_values[vi].count)
-      {
-        fprintf(stderr, "Trying to print but nothing more! di: %d, count: %d\n", di, pcrs.pcr_values[vi].count);
-        return false;
-      }
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
+      printf("\nConnection Failed \n");
+      return -1;
+    }
 
-      // Print current PRC content (digest value)
-      TPM2B_DIGEST *d = &pcrs.pcr_values[vi].digests[di];
+    /** NO NEED TO SEND BACK THE NONCE SINCE THE RA WILL USE THE NONCE HE GENERATED FOR THIS REQUEST
+    *  ALSO IMPORTANT BECAUSE IT AVOIDS REPLAY ATTACKS IF THE RA DOES NOT DO ANY CHECKS ON THE FRESHNESS
+    *  OF THE JUST RECEIVED NONCE
+    */
+
+    sentBytes += send(sock, &TpaData.pcrs_blob.tag, sizeof(u_int8_t), 0);
+    sentBytes += send(sock, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), 0);
+    sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count, 0);
+    sentBytes += send(sock, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count, 0);
+
+    sentBytes += send(sock, &TpaData.sig_blob.tag, sizeof(u_int8_t), 0);
+    sentBytes += send(sock, &TpaData.sig_blob.size, sizeof(u_int16_t), 0);
+    sentBytes += send(sock, &TpaData.sig_blob.buffer, sizeof(u_int8_t) * TpaData.sig_blob.size, 0);
+
+    sentBytes += send(sock, &TpaData.message_blob.tag, sizeof(u_int8_t), 0);
+    sentBytes += send(sock, &TpaData.message_blob.size, sizeof(u_int16_t), 0);
+    sentBytes += send(sock, &TpaData.message_blob.buffer, sizeof(u_int8_t) * TpaData.message_blob.size, 0);
+
+    sentBytes += send(sock, &TpaData.ima_log_blob.tag, sizeof(u_int8_t), 0);
+    sentBytes += send(sock, &TpaData.ima_log_blob.size, sizeof(u_int16_t), 0);
+
+    for (i = 0; i < TpaData.ima_log_blob.size; i++)
+    {
+      // send header
+      tmp = send(sock, &TpaData.ima_log_blob.logEntry[i].header, sizeof TpaData.ima_log_blob.logEntry[i].header, 0);
+      *imaLogBytesSize += tmp;
+      sentBytes += tmp;
+      // send name
+      tmp = send(sock, &TpaData.ima_log_blob.logEntry[i].name, TpaData.ima_log_blob.logEntry[i].header.name_len * sizeof(char), 0);
+      *imaLogBytesSize += tmp;
+      sentBytes += tmp;
+      // send template data len
+      tmp = send(sock, &TpaData.ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t), 0);
+      *imaLogBytesSize += tmp;
+      sentBytes += tmp;
+      // send template data
+      tmp = send(sock, &TpaData.ima_log_blob.logEntry[i].template_data, TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t), 0);
+      *imaLogBytesSize += tmp;
+      sentBytes += tmp;
+    }
+
+    fprintf(stdout, "imaLogBytesSize = %d\n", *imaLogBytesSize);
+    fprintf(stdout, "sentBytes = %d\n", sentBytes);
+    return sentBytes;
+  }
+
+  bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context)
+  {
+    UINT32 i;
+    size_t vi = 0; /* value index */
+    UINT32 di = 0; /* digest index */
+    u_int8_t pcr_max[SHA256_DIGEST_LENGTH];
+    TSS2_RC tss_r;
+
+    memset(pcr_max, 0, SHA256_DIGEST_LENGTH); /* initial PCR9-sha256 (is the max) content 0..0 */
+
+    // Prepare TPML_PCR_SELECTION to read only PCR9
+    // If PCR9 (sha1+sha256) are already extended, do NOT extend them more otherwise it's not possible to check its integrity
+    TPML_PCR_SELECTION pcr_select;
+    tpm2_pcrs pcrs;
+    bool res = pcr_parse_selections("sha1:9+sha256:9", &pcr_select);
+    if (!res)
+    return false;
+
+    tss_r = pcr_read_pcr_values(esys_context, &pcr_select, &pcrs);
+    if (tss_r != TSS2_RC_SUCCESS)
+    {
+      fprintf(stderr, "Error while reading PCRs from TPM\n");
+      return false;
+    }
+
+    // Go through all PCRs in each bank
+    for (i = 0; i < pcr_select.count; i++)
+    {
+      const char *alg_name;
       if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1)
       {
-        if (memcmp(d->buffer, pcr_max, SHA_DIGEST_LENGTH))
-          return false;
+        alg_name = malloc(strlen("sha1") * sizeof(char));
+        alg_name = "sha1";
       }
       else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256)
       {
-        if (memcmp(d->buffer, pcr_max, SHA256_DIGEST_LENGTH))
-          return false;
+        alg_name = malloc(strlen("sha256") * sizeof(char));
+        alg_name = "sha256";
       }
 
-      if (++di >= pcrs.pcr_values[vi].count)
+      // Go through all PCRs in this banks
+      unsigned int pcr_id;
+      for (pcr_id = 0; pcr_id < pcr_select.pcrSelections[i].sizeofSelect * 8u; pcr_id++)
       {
-        di = 0;
-        ++vi;
+        // skip unset pcrs (bit = 0)
+        if (!(pcr_select.pcrSelections[i].pcrSelect[((pcr_id) / 8)] & (1 << ((pcr_id) % 8))))
+        {
+          continue;
+        }
+
+        if (vi >= pcrs.count || di >= pcrs.pcr_values[vi].count)
+        {
+          fprintf(stderr, "Trying to print but nothing more! di: %d, count: %d\n", di, pcrs.pcr_values[vi].count);
+          return false;
+        }
+
+        // Print current PRC content (digest value)
+        TPM2B_DIGEST *d = &pcrs.pcr_values[vi].digests[di];
+        if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1)
+        {
+          if (memcmp(d->buffer, pcr_max, SHA_DIGEST_LENGTH))
+          return false;
+        }
+        else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256)
+        {
+          if (memcmp(d->buffer, pcr_max, SHA256_DIGEST_LENGTH))
+          return false;
+        }
+
+        if (++di >= pcrs.pcr_values[vi].count)
+        {
+          di = 0;
+          ++vi;
+        }
       }
     }
-  }
 
-  return true;
-}
+    return true;
+  }

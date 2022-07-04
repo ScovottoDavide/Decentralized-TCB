@@ -95,7 +95,8 @@ int main(int argc, char const *argv[])
 
 void waitTPAData(TO_SEND *TpaData)
 {
-  int server_fd, new_socket, valread;
+  int server_fd, new_socket;
+  ssize_t valread, accReadBytes = 0;
   struct sockaddr_in address;
   int opt = 1, i;
   int addrlen = sizeof(address);
@@ -150,12 +151,14 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Wrong tag received for the pcrs!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
   valread = recv(new_socket, &TpaData->pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION), MSG_WAITALL);
   if (valread < 0 || valread > sizeof(TPML_PCR_SELECTION))
   {
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
 
   valread = recv(new_socket, &TpaData->pcrs_blob.pcrs.count, sizeof TpaData->pcrs_blob.pcrs.count, MSG_WAITALL);
   if (valread < 0 || valread > sizeof TpaData->pcrs_blob.pcrs.count)
@@ -163,6 +166,7 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
 
   valread = recv(new_socket, &TpaData->pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count, MSG_WAITALL);
   if (valread < 0 || valread > sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count)
@@ -170,6 +174,7 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
   /** END OF READING PCRS */
 
   /** READ SIGNATURE FROM SOCKET */
@@ -184,12 +189,15 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Wrong tag received for the signature!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
+
   valread = recv(new_socket, &TpaData->sig_blob.size, sizeof(u_int16_t), MSG_WAITALL);
   if (valread < 0 || valread > sizeof(u_int16_t))
   {
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
 
   TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size * sizeof(u_int8_t));
   if(TpaData->sig_blob.buffer == NULL){
@@ -202,6 +210,7 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
   /** END OF READING SIGNATURE */
 
   /** READ QUOTE FROM SOCKET */
@@ -216,12 +225,15 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Wrong tag received for the quote!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
+
   valread = recv(new_socket, &TpaData->message_blob.size, sizeof(u_int16_t), MSG_WAITALL);
   if (valread < 0 || valread > sizeof(u_int16_t))
   {
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
 
   TpaData->message_blob.buffer = malloc(TpaData->message_blob.size * sizeof(u_int8_t));
   if(TpaData->message_blob.buffer == NULL){
@@ -234,6 +246,7 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
   /** END OF READING QUOTE */
 
   /** READ IMA LOG */
@@ -249,6 +262,8 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Wrong tag received for the quote!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
+
   valread = recv(new_socket, &TpaData->ima_log_blob.size, sizeof(u_int16_t), MSG_WAITALL);
   if (valread <= 0 || valread > sizeof(u_int16_t))
   {
@@ -256,6 +271,8 @@ void waitTPAData(TO_SEND *TpaData)
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
+  accReadBytes += valread;
+
   TpaData->ima_log_blob.logEntry = malloc(TpaData->ima_log_blob.size * sizeof(struct event));
   if(TpaData->ima_log_blob.logEntry == NULL){
     fprintf(stdout, "OOM\n");
@@ -271,6 +288,8 @@ void waitTPAData(TO_SEND *TpaData)
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
+    accReadBytes += valread;
+
     valread = recv(new_socket, TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char), MSG_WAITALL);
     if (valread <= 0 || valread > TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char))
     {
@@ -278,6 +297,8 @@ void waitTPAData(TO_SEND *TpaData)
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
+    accReadBytes += valread;
+
     valread = recv(new_socket, &TpaData->ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t), MSG_WAITALL);
     if (valread <= 0 || valread > sizeof(u_int32_t))
     {
@@ -286,6 +307,8 @@ void waitTPAData(TO_SEND *TpaData)
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
+    accReadBytes += valread;
+
     TpaData->ima_log_blob.logEntry[i].template_data = malloc(TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
     valread = recv(new_socket, TpaData->ima_log_blob.logEntry[i].template_data, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t), MSG_WAITALL);
     if (valread <= 0 || valread > TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t))
@@ -294,8 +317,12 @@ void waitTPAData(TO_SEND *TpaData)
       fprintf(stdout, "Error while reading through socket 111!\n");
       exit(EXIT_FAILURE);
     }
+    accReadBytes += valread;
+
   }
   /** END OF READ IMA LOG */
+
+  fprintf(stdout, "Read bytes = %d \n", accReadBytes);
   fprintf(stdout, "Closing socket... \n\n");
   close(server_fd);
   close(new_socket);

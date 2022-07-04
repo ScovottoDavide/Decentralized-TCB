@@ -40,4 +40,4 @@ typedef struct {
 } IMA_LOG_BLOB;
 
 static int read_template_data(struct event *template, FILE *fp, struct event_blob *blob_template);
-int read_write_IMAb(const char *path, IMA_LOG_BLOB *ima_log_blob);
+int read_write_IMAb(const char *path, IMA_LOG_BLOB *ima_log_blob, ssize_t imaLogBytesSize);
