@@ -837,7 +837,7 @@ TSS2_RC tpm2_quote_internal(ESYS_CONTEXT *esys_context, tpm2_loaded_object *quot
   return TSS2_RC_SUCCESS;
 }
 
-TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData)
+TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytesSize)
 {
   bool res;
   TSS2_RC tss_r;
@@ -965,11 +965,10 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData)
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements", &TpaData->ima_log_blob) != 0)
+  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements", &TpaData->ima_log_blob, imaLogBytesSize) != 0)
   {
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }
-  // fprintf(stdout, "tag=%d  size=%d  sizeof=%d\n", TpaData->ima_log_blob.tag, TpaData->ima_log_blob.size, sizeof TpaData->ima_log_blob.logEntry);
 
   return write_output_files(TpaData);
 }
