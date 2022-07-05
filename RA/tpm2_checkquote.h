@@ -100,6 +100,7 @@ struct event {
 typedef struct {
   u_int8_t tag; // 4
   u_int16_t size;
+  u_int8_t wholeLog;
   struct event *logEntry; // realloc as soon as the number of log entries passes the preallocated size
 } IMA_LOG_BLOB;
 

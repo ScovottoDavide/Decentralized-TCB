@@ -89,9 +89,11 @@ int read_write_IMAb(const char *path,  IMA_LOG_BLOB *ima_log_blob, ssize_t imaLo
 		/** Initialize the blob */
 		ima_log_blob->tag = 4;
 		ima_log_blob->size = 0;
+		ima_log_blob->wholeLog = 1;
 		/** Preallocate some space for the logs */
 		ima_log_blob->logEntry = malloc(initial_log_size*sizeof(struct event_blob));
 	}else{
+		ima_log_blob->wholeLog = 0;
 		fseek(fp, imaLogBytesSize, SEEK_SET);
 	}
 

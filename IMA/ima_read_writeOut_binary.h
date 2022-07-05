@@ -36,6 +36,7 @@ struct event_blob {
 typedef struct {
   u_int8_t tag; // 4
   u_int16_t size;
+  u_int8_t wholeLog; // 1 = whole log will be sent, 0 = only part of it
   struct event_blob *logEntry; // realloc as soon as the number of log entries passes the preallocated size
 } IMA_LOG_BLOB;
 

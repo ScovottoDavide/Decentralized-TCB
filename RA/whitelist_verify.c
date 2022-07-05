@@ -265,6 +265,9 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG
 
   if (memcmp(pcr_aggr, pcr10_sha256, SHA256_DIGEST_LENGTH) == 0)
   {
+    if(ima_log_blob.wholeLog == 1){
+      // save to file ?
+    }
     fprintf(stdout, "PCR10 verification successfull!\n");
   }
   else

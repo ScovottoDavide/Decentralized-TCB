@@ -253,7 +253,6 @@ void waitTPAData(TO_SEND *TpaData)
   valread = recv(new_socket, &TpaData->ima_log_blob.tag, sizeof(u_int8_t), MSG_WAITALL);
   if (valread <= 0 || valread > sizeof(u_int8_t))
   {
-    fprintf(stdout, "Blocked 1 ... \n\n");
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
@@ -267,7 +266,14 @@ void waitTPAData(TO_SEND *TpaData)
   valread = recv(new_socket, &TpaData->ima_log_blob.size, sizeof(u_int16_t), MSG_WAITALL);
   if (valread <= 0 || valread > sizeof(u_int16_t))
   {
-    fprintf(stdout, "Blocked 2 ... \n\n");
+    fprintf(stdout, "Error while reading through socket!\n");
+    exit(EXIT_FAILURE);
+  }
+  accReadBytes += valread;
+
+  valread = recv(new_socket, &TpaData->ima_log_blob.wholeLog, sizeof(u_int8_t), MSG_WAITALL);
+  if (valread <= 0 || valread > sizeof(u_int8_t))
+  {
     fprintf(stdout, "Error while reading through socket!\n");
     exit(EXIT_FAILURE);
   }
@@ -283,8 +289,6 @@ void waitTPAData(TO_SEND *TpaData)
     valread = recv(new_socket, &TpaData->ima_log_blob.logEntry[i].header, sizeof TpaData->ima_log_blob.logEntry[i].header, MSG_WAITALL);
     if (valread <= 0 || valread > sizeof TpaData->ima_log_blob.logEntry[i].header)
     {
-      fprintf(stdout, "Blocked 3 ... \n\n");
-      fprintf(stdout, "%d \n", valread);
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
@@ -293,7 +297,6 @@ void waitTPAData(TO_SEND *TpaData)
     valread = recv(new_socket, TpaData->ima_log_blob.logEntry[i].name, TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char), MSG_WAITALL);
     if (valread <= 0 || valread > TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char))
     {
-      fprintf(stdout, "Blocked 4 ... \n\n");
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
@@ -302,8 +305,6 @@ void waitTPAData(TO_SEND *TpaData)
     valread = recv(new_socket, &TpaData->ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t), MSG_WAITALL);
     if (valread <= 0 || valread > sizeof(u_int32_t))
     {
-      fprintf(stdout, "Blocked 5 ... \n\n");
-      fprintf(stdout, "%d \n", valread);
       fprintf(stdout, "Error while reading through socket!\n");
       exit(EXIT_FAILURE);
     }
@@ -313,7 +314,6 @@ void waitTPAData(TO_SEND *TpaData)
     valread = recv(new_socket, TpaData->ima_log_blob.logEntry[i].template_data, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t), MSG_WAITALL);
     if (valread <= 0 || valread > TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t))
     {
-      fprintf(stdout, "Blocked 6 ... \n\n");
       fprintf(stdout, "Error while reading through socket 111!\n");
       exit(EXIT_FAILURE);
     }
