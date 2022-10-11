@@ -35,7 +35,7 @@ int main(int argc, char const *argv[])
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("../index_node2.txt", "r");
+  index_file = fopen("/etc/tc/index_node2.txt", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;

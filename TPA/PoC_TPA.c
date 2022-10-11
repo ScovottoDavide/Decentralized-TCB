@@ -13,7 +13,7 @@
 #include "tpm2_quote.h"
 #include "PCR9Extend.h"
 #include "../../WAM/WAM.h"
-#include "./cjson/cJSON.h"
+
 //#include "../IMA/ima_read_writeOut_binary.h"
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
