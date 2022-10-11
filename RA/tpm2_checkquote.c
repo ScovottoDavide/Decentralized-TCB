@@ -539,6 +539,10 @@ bool tpm2_checkquote(TO_SEND TpaData)
   memcpy(ctx.extra_data.buffer, TpaData.nonce_blob.buffer, ctx.extra_data.size);
 
   TPM2B_ATTEST *msg = malloc(sizeof(TPM2B_ATTEST));
+  if(msg == NULL){
+    fprintf(stdout, "OOM \n");
+    return false;
+  }
   msg->size = TpaData.message_blob.size;
   memcpy(msg->attestationData, TpaData.message_blob.buffer, msg->size);
 
