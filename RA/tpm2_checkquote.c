@@ -499,6 +499,7 @@ bool verify(void)
   if (!rc)
   {
     fprintf(stderr, "Error validating signed message with public key provided\n");
+    fprintf(stdout, "\n");
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(pkey_ctx);
     return false;

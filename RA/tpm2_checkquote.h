@@ -104,14 +104,23 @@ typedef struct {
   struct event *logEntry; // realloc as soon as the number of log entries passes the preallocated size
 } IMA_LOG_BLOB;
 
-typedef struct
-{
+typedef struct {
   NONCE_BLOB nonce_blob;
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
   PCRS_BLOB pcrs_blob;
   IMA_LOG_BLOB ima_log_blob;
 } TO_SEND;
+
+typedef struct {
+  uint16_t name_len;
+  char *untrusted_path_name;
+} UNTRUSTED_PATH;
+typedef struct {
+  uint8_t tag; // 5
+  uint16_t number_white_entries;
+  UNTRUSTED_PATH *untrusted_entries;
+} VERIFICATION_RESPONSE;
 
 
 bool files_get_file_size(FILE *fp, unsigned long *file_size, const char *path);

@@ -16,7 +16,7 @@
 //#include "../IMA/ima_read_writeOut_binary.h"
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
-int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel ch_send);
+int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 void hextobin(unsigned char *v, unsigned char *s, size_t n);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index **read_indexes);
@@ -41,23 +41,11 @@ int main() {
   IOTA_Index heartBeat_index, write_index;
   FILE *index_file;
 
-  tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
-  if (tss_r != TSS2_RC_SUCCESS) {
-    printf("Could not initialize tcti context\n");
-    exit(-1);
-  }
-
-  tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
-  if (tss_r != TSS2_RC_SUCCESS) {
-    printf("Could not initialize esys context\n");
-    exit(-1);
-  }
-
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/index_node1.txt", "r");
+  index_file = fopen("/etc/tc/TPA_index_node1.txt", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;
@@ -80,6 +68,17 @@ int main() {
       TpaData.nonce_blob.size = sizeof nonce;
       memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
 
+      tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
+      if (tss_r != TSS2_RC_SUCCESS) {
+        printf("Could not initialize tcti context\n");
+        exit(-1);
+      }
+
+      tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
+      if (tss_r != TSS2_RC_SUCCESS) {
+        printf("Could not initialize esys context\n");
+        exit(-1);
+      }
       /**
       Assumption: Ek is at NV-Index 0x80000000, AK is at NV-Index 0x80000001
       and they are the only persistent handles in NV-RAM.
@@ -120,10 +119,10 @@ int main() {
       if (tss_r != TSS2_RC_SUCCESS) {
         printf("Error while computing quote!\n");
         exit(-1);
-      }
-
+      } 
+      
       /** SEND DATA TO THE REMOTE ATTESTOR */
-      sendDataToRA_WAM(TpaData, &imaLogBytesSize, ch_send); 
+      sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
     }
   }
 
@@ -194,10 +193,9 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
     return capabilityData->data.handles.count;
   }
 
-  int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel ch_send) {
-    uint8_t *to_send_data;
+  int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send) {
+    uint8_t *to_send_data = NULL;
     size_t bytes_to_send = 0, acc = 0;
-    uint32_t pipi = 0;
     int i = 0;
     uint8_t last[4] = "done";
 
@@ -219,7 +217,8 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
       // send template data;
       bytes_to_send += TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
     }
-
+    bytes_to_send += sizeof last;
+    
     to_send_data = malloc(sizeof(u_int8_t) * bytes_to_send);
     if(to_send_data == NULL){
       fprintf(stdout, "OOM\n");
@@ -271,11 +270,14 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
       acc += TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
     }
 
-    bytes_to_send += sizeof last;
     memcpy(to_send_data + acc, last, sizeof last);
+    acc += sizeof last;
+    
+    WAM_write(ch_send, to_send_data, (uint32_t)bytes_to_send, false);
+    fprintf(stdout, "\t\n DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
 
-    WAM_write(&ch_send, to_send_data, (uint32_t)bytes_to_send, false);
-    fprintf(stdout, "\t\n DONE WRITING \n");
+    free(to_send_data);
+    free(TpaData.ima_log_blob.logEntry);
   }
 
   bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context)

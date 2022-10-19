@@ -69,7 +69,7 @@ static int read_template_data(struct event *template, FILE *fp, struct event_blo
 	fread(path_field, sizeof(u_int8_t), field_path_len, fp); /* [file hash] */
 	memcpy(blob_template->template_data + acc, path_field, field_path_len*sizeof(u_int8_t));
 	acc += field_path_len*sizeof(u_int8_t);
-	}
+}
 	return 0;
 }
 
