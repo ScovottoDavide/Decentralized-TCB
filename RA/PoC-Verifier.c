@@ -7,7 +7,6 @@
 #include "whitelist_verify.h"
 #include "../../WAM/WAM.h"
 
-//bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
@@ -102,6 +101,22 @@ int main(int argc, char const *argv[])
           // PCR10 calculation + whitelist verify
           fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
           verify_PCR10_whitelist(&pcr10_sha1, &pcr10_sha256, TpaData.ima_log_blob, &ver_response);
+          fprintf(stdout, "PCR9 sha1: ");
+          for(i = 0; i<SHA_DIGEST_LENGTH;i++)
+            fprintf(stdout, "%02X", pcr9_sha1[i]);
+          fprintf(stdout, "\n");
+          fprintf(stdout, "PCR10 sha1: ");
+          for(i = 0; i<SHA_DIGEST_LENGTH;i++)
+            fprintf(stdout, "%02X", pcr10_sha1[i]);
+          fprintf(stdout, "\n");
+          fprintf(stdout, "PCR9 sha256: ");
+          for(i = 0; i<SHA256_DIGEST_LENGTH;i++)
+            fprintf(stdout, "%02X", pcr9_sha256[i]);
+          fprintf(stdout, "\n");
+          fprintf(stdout, "PCR10 sha256: ");
+          for(i = 0; i<SHA256_DIGEST_LENGTH;i++)
+            fprintf(stdout, "%02X", pcr10_sha256[i]);
+          fprintf(stdout, "\n");
 
           if (!tpm2_checkquote(TpaData, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
             fprintf(stderr, "Error while verifying quote!\n");
@@ -380,13 +395,10 @@ bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expecte
   u_int8_t *pcr_sha256;
   pcr_sha256 = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
   k = SHA256_DIGEST_LENGTH;
-  for (i = 0; i < md_len_sha256; i++)
-  {
+  for (i = 0; i < md_len_sha256; i++) 
     pcr_sha256[k++] = digest_sha256[i];
-  }
-
   pcr_sha256[SHA256_DIGEST_LENGTH * 2] = '\0';
-  *expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH) * sizeof(unsigned char));
+  *expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
   md_len_sha256 = computePCRsoftBinding(pcr_sha256, "sha256", expected_PCR9sha256, SHA256_DIGEST_LENGTH * 2);
   if (md_len_sha256 <= 0)
     return false;

@@ -190,6 +190,9 @@ bool verify(void)
     return false;
   }
 
+  for(int i = 0; i<ctx.msg_hash.size; i++)
+    fprintf(stdout, "%02x", ctx.msg_hash.buffer[i]);
+  fprintf(stdout, "\n");
   rc = EVP_PKEY_verify(pkey_ctx, ctx.signature.buffer, ctx.signature.size, ctx.msg_hash.buffer, ctx.msg_hash.size);
   if (!rc) {
     fprintf(stderr, "Error validating signed message with public key provided\n");
