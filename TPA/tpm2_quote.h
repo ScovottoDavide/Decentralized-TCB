@@ -61,17 +61,9 @@ typedef struct
 
 typedef struct
 {
-  u_int8_t tag; // 3
-  TPML_PCR_SELECTION pcr_selection;
-  tpm2_pcrs pcrs;
-} PCRS_BLOB;
-
-typedef struct
-{
   NONCE_BLOB nonce_blob;
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
-  PCRS_BLOB pcrs_blob;
   IMA_LOG_BLOB ima_log_blob; // defined in /IMA/ima_read_writeOut_binary.h
 } TO_SEND;
 
@@ -98,7 +90,6 @@ bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_diges
 
 bool tpm2_convert_sig_save(TPMT_SIGNATURE *signature, TO_SEND *TpaData);
 bool tpm2_save_message_out(UINT8 *buf, UINT16 size, TO_SEND *TpaData);
-bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, TO_SEND *TpaData);
 static TSS2_RC write_output_files(TO_SEND *TpaData);
 
 // It's a "cast" from TPM2B_ATTEST to TPMS_ATTEST to get all the information related to the attested data

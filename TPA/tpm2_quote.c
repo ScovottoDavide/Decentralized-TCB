@@ -749,46 +749,6 @@ bool tpm2_save_message_out(UINT8 *buf, UINT16 size, TO_SEND *TpaData)
   return true;
 }
 
-bool pcr_fwrite_serialized(const TPML_PCR_SELECTION *pcr_select, const tpm2_pcrs *ppcrs, TO_SEND *TpaData)
-{
-
-  /** Export TPML_PCR_SELECTION structure to pcr blob  */
-  TpaData->pcrs_blob.tag = (u_int8_t)3;
-
-  TPML_PCR_SELECTION pcr_selection = *pcr_select;
-  for (UINT32 i = 0; i < pcr_selection.count; i++)
-  {
-    TPMS_PCR_SELECTION *p = &pcr_selection.pcrSelections[i];
-    p->hash = htole16(p->hash);
-  }
-  pcr_selection.count = htole32(pcr_selection.count);
-
-  memcpy(&TpaData->pcrs_blob.pcr_selection, &pcr_selection, sizeof(TPML_PCR_SELECTION));
-
-  // Export PCR digests to pcr outfile
-  UINT32 count = htole32(ppcrs->count);
-
-  /** Set pcrs count */
-  memcpy(&TpaData->pcrs_blob.pcrs.count, &count, sizeof(UINT32));
-
-  tpm2_pcrs pcrs = *ppcrs;
-  for (size_t j = 0; j < pcrs.count; j++)
-  {
-    TPML_DIGEST *pcr_value = &pcrs.pcr_values[j];
-
-    for (size_t k = 0; k < pcr_value->count; k++)
-    {
-      TPM2B_DIGEST *p = &pcr_value->digests[k];
-      p->size = htole16(p->size);
-    }
-    pcr_value->count = htole32(pcr_value->count);
-
-    memcpy(&TpaData->pcrs_blob.pcrs.pcr_values[j], pcr_value, sizeof(TPML_DIGEST));
-  }
-
-  return true;
-}
-
 static TSS2_RC write_output_files(TO_SEND *TpaData)
 {
   bool is_success = true;
@@ -800,10 +760,6 @@ static TSS2_RC write_output_files(TO_SEND *TpaData)
     is_success = result;
 
   result = tpm2_save_message_out((UINT8 *)&ctx.quoted->attestationData, ctx.quoted->size, TpaData);
-  if (!result)
-    is_success = result;
-
-  result = pcr_fwrite_serialized(&ctx.pcr_selections, &ctx.pcrs, TpaData);
   if (!result)
     is_success = result;
 

@@ -7,37 +7,38 @@
 #include "whitelist_verify.h"
 #include "../../WAM/WAM.h"
 
-bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
+//bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
-bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256, PCRS_BLOB pcrs_blob);
+bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index **read_indexes);
-void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int *imaSize);
+void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response);
 
 int main(int argc, char const *argv[])
 {
-  int i, imaSize = 0, j;
-  TO_SEND TpaData;
-  VERIFICATION_RESPONSE ver_response;
+  int i, j;
+  TO_SEND TpaData; VERIFICATION_RESPONSE ver_response;
   FILE *index_file;
+  
   IOTA_Index heartBeat_index, *read_indexes, write_response_index;
   uint8_t mykey[]="supersecretkeyforencryptionalby";
 	WAM_channel ch_read_hearbeat, ch_read_attest, ch_write_response;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
-	uint8_t nonce[32];
-	uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, offset = 0;
-	uint8_t ret = 0, *read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0;
+	
+  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, offset = 0;
+	uint8_t ret = 0, *read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
   uint16_t previous_msg_num = 0;
-  uint8_t last[4] = "done";
+
+  unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL, *pcr10_sha256 = NULL, *pcr10_sha1 = NULL;
 
   IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/RA_index_node2.txt", "r");
+  index_file = fopen("/etc/tc/RA_index_node2.json", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;
@@ -88,24 +89,26 @@ int main(int argc, char const *argv[])
         }
         else if(memcmp(last, read_attest_message + ch_read_attest.recv_bytes - sizeof last, sizeof last) == 0){
           fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest.recv_bytes);
-          parseTPAdata(&TpaData, read_attest_message, &imaSize);
+          parseTPAdata(&TpaData, read_attest_message);
           have_to_read = 0;
-          if (!tpm2_checkquote(TpaData)) {
+          
+          // Get also pcr10 since we're reading pcrs here
+          fprintf(stdout, "Calculating PCR9s ...\n");
+          if (!PCR9_calculation(&pcr9_sha1, &pcr9_sha256)) {
+            fprintf(stderr, "PCR9 calculation failed\n");
+            exit(-1);
+          }
+
+          // PCR10 calculation + whitelist verify
+          fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
+          verify_PCR10_whitelist(&pcr10_sha1, &pcr10_sha256, TpaData.ima_log_blob, &ver_response);
+
+          if (!tpm2_checkquote(TpaData, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
             fprintf(stderr, "Error while verifying quote!\n");
             exit(-1);
           }
           fprintf(stdout, "Quote successfully verified!!!!\n");
-          TPM2B_DIGEST pcr10_sha256, pcr10_sha1;
-          // Get also pcr10 since we're reading pcrs here
-          if (!PCR9_verification(&pcr10_sha1, &pcr10_sha256, TpaData.pcrs_blob)) {
-            fprintf(stderr, "PCR9 verification failed\n");
-            exit(-1);
-          }
-          fprintf(stdout, "PCR9 verfication successfull!!!!\n");
           
-          // PCR10 verification in whitelist verify
-          verify_PCR10_whitelist(pcr10_sha1.buffer, pcr10_sha256.buffer, TpaData.ima_log_blob, &ver_response);
-
           // write "response" to heartbeat
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response);
@@ -116,6 +119,10 @@ int main(int argc, char const *argv[])
           free(TpaData.ima_log_blob.logEntry);
           free(TpaData.sig_blob.buffer);
           free(TpaData.message_blob.buffer);
+          free(pcr10_sha1);
+          free(pcr10_sha256);
+          free(pcr9_sha1);
+          free(pcr9_sha256);
         }
       }
     }
@@ -153,18 +160,8 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key_1")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes[0]->keys.pub, ED_PUBLIC_KEY_BYTES);
 }
 
-void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int *imaSize) {
+void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message) {
   int acc = 0, i;
-
-  // PCRS
-  memcpy(&TpaData->pcrs_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
-  acc += sizeof(u_int8_t);
-  memcpy(&TpaData->pcrs_blob.pcr_selection, read_attest_message + acc, sizeof(TPML_PCR_SELECTION));
-  acc += sizeof(TPML_PCR_SELECTION);
-  memcpy(&TpaData->pcrs_blob.pcrs.count, read_attest_message + acc, sizeof TpaData->pcrs_blob.pcrs.count);
-  acc += sizeof TpaData->pcrs_blob.pcrs.count;
-  memcpy(&TpaData->pcrs_blob.pcrs.pcr_values, read_attest_message + acc, sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count);
-  acc += sizeof(TPML_DIGEST) * TpaData->pcrs_blob.pcrs.count;
 
   // SIG
   memcpy(&TpaData->sig_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
@@ -174,7 +171,7 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int *imaSize) 
   TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size * sizeof(u_int8_t));
   memcpy(TpaData->sig_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData->sig_blob.size);
   acc += sizeof(u_int8_t) * TpaData->sig_blob.size;
-
+  
   // MESSAGE
   memcpy(&TpaData->message_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
@@ -187,34 +184,27 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int *imaSize) 
   // IMA
   memcpy(&TpaData->ima_log_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  *imaSize += sizeof(u_int8_t);
   memcpy(&TpaData->ima_log_blob.size, read_attest_message + acc, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
-  *imaSize += sizeof(u_int16_t); 
   memcpy(&TpaData->ima_log_blob.wholeLog, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  *imaSize += sizeof(u_int8_t);
-
+  
   TpaData->ima_log_blob.logEntry = calloc(TpaData->ima_log_blob.size, sizeof(struct event));
 
   for (i = 0; i < TpaData->ima_log_blob.size; i++) {
     // send header
     memcpy(&TpaData->ima_log_blob.logEntry[i].header, read_attest_message + acc, sizeof TpaData->ima_log_blob.logEntry[i].header);
     acc += sizeof TpaData->ima_log_blob.logEntry[i].header;
-    *imaSize += sizeof TpaData->ima_log_blob.logEntry[i].header;
     // send name
     memcpy(TpaData->ima_log_blob.logEntry[i].name, read_attest_message + acc, TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char));
     acc += TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char);
-    *imaSize += TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char);
     // send template data len
     memcpy(&TpaData->ima_log_blob.logEntry[i].template_data_len, read_attest_message + acc, sizeof(u_int32_t));
     acc += sizeof(u_int32_t);
-    *imaSize += sizeof(u_int32_t);
     // send template data
     TpaData->ima_log_blob.logEntry[i].template_data = malloc(TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
     memcpy(TpaData->ima_log_blob.logEntry[i].template_data, read_attest_message + acc, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
     acc += TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
-    *imaSize += TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
   }
 }
 
@@ -228,8 +218,6 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
     bytes_to_send += sizeof(uint16_t);
     bytes_to_send += ver_response.untrusted_entries[i].name_len * sizeof(char);
   }
-  
-  fprintf(stdout, "last = %d\n", sizeof last);
   bytes_to_send += sizeof last;
 
   response_buff = malloc(sizeof(uint8_t) * bytes_to_send);
@@ -242,101 +230,28 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
   acc += sizeof(uint8_t);
   memcpy(response_buff + acc, &ver_response.number_white_entries, sizeof(uint16_t));
   acc += sizeof(uint16_t);
-
   for(i = 0; i < ver_response.number_white_entries; i++){
     memcpy(response_buff + acc, &ver_response.untrusted_entries[i].name_len, sizeof(uint16_t));
     acc += sizeof(uint16_t);
     memcpy(response_buff + acc, ver_response.untrusted_entries[i].untrusted_path_name, ver_response.untrusted_entries[i].name_len * sizeof(char));
     acc += ver_response.untrusted_entries[i].name_len * sizeof(char);
   }
-
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
 
-  fprintf(stdout, "Writing at: "); print_raw_hex(ch_send->current_index.index, INDEX_SIZE);
+  fprintf(stdout, "Writing at: "); 
+  for(i = 0; i < INDEX_SIZE; i++)
+    fprintf(stdout, "%02x", ch_send->current_index.index[i]);
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
   fprintf(stdout, "\n\t DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
 
   free(response_buff);
-  /*for(i = 0; i < ver_response.number_white_entries; i++)
+  for(i = 0; i < ver_response.number_white_entries; i++)
     free(ver_response.untrusted_entries[i].untrusted_path_name);
-  free(ver_response.untrusted_entries);*/
+  free(ver_response.untrusted_entries);
 }
 
-bool pcr_get_pcr_byId(TPML_PCR_SELECTION pcr_select, tpm2_pcrs *pcrs, TPM2B_DIGEST *pcr9_sha1, TPM2B_DIGEST *pcr9_sha256, int id)
-{
-  UINT32 i;
-  size_t vi = 0; /* value index */
-  UINT32 di = 0; /* digest index */
-  const char *alg_name;
-  TPM2B_DIGEST *d;
-
-  // Go through all PCRs in each bank
-  for (i = 0; i < pcr_select.count; i++)
-  {
-    if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1)
-    {
-      alg_name = malloc(strlen("sha1") * sizeof(char));
-      alg_name = "sha1";
-    }
-    else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256)
-    {
-      alg_name = malloc(strlen("sha256") * sizeof(char));
-      alg_name = "sha256";
-    }
-
-    // Go through all PCRs in this banks
-    unsigned int pcr_id;
-    for (pcr_id = 0; pcr_id < pcr_select.pcrSelections[i].sizeofSelect * 8u; pcr_id++)
-    {
-      // skip unset pcrs (bit = 0)
-      if (!(pcr_select.pcrSelections[i].pcrSelect[((pcr_id) / 8)] & (1 << ((pcr_id) % 8))))
-      {
-        continue;
-      }
-
-      if (vi >= pcrs->count || di >= pcrs->pcr_values[vi].count)
-      {
-        fprintf(stderr, "Trying to print but nothing more! di: %d, count: %d\n", di, pcrs->pcr_values[vi].count);
-        return false;
-      }
-
-      if (pcr_id == id)
-      {
-        d = &pcrs->pcr_values[vi].digests[di];
-        if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA1)
-        {
-          if (!memcpy(pcr9_sha1->buffer, d->buffer, SHA_DIGEST_LENGTH))
-          {
-            goto out;
-          }
-        }
-        else if (pcr_select.pcrSelections[i].hash == TPM2_ALG_SHA256)
-        {
-          if (!memcpy(pcr9_sha256->buffer, d->buffer, SHA256_DIGEST_LENGTH))
-          {
-            goto out;
-          }
-        }
-      }
-
-      if (++di >= pcrs->pcr_values[vi].count)
-      {
-        di = 0;
-        ++vi;
-      }
-    }
-  }
-
-  return true;
-out:
-  free(d);
-  return false;
-}
-
-bool openAKPub(const char *path, unsigned char **akPub)
-{
-
+bool openAKPub(const char *path, unsigned char **akPub) {
   FILE *ak_pub = fopen(path, "r");
   if (ak_pub == NULL)
   {
@@ -382,8 +297,7 @@ bool openAKPub(const char *path, unsigned char **akPub)
   return true;
 }
 
-int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest)
-{
+int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
@@ -406,8 +320,7 @@ int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **
   return md_len;
 }
 
-int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size)
-{
+int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
@@ -430,39 +343,13 @@ int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, 
   return md_len;
 }
 
-bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256, PCRS_BLOB pcrs_blob)
-{
-  TPML_PCR_SELECTION pcr_select;
-  tpm2_pcrs *pcrs;
-  tpm2_pcrs temp_pcrs = {};
-  TPM2B_DIGEST pcr9_sha1, pcr9_sha256;
+bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256) {
   int i;
-
-  // Get pcrs from the received pcrs blob
-  pcr_select = pcrs_blob.pcr_selection;
-  pcrs = &pcrs_blob.pcrs;
-  if (le32toh(pcr_select.count) > TPM2_NUM_PCR_BANKS)
-  {
-    return false;
-  }
-
-  if (!pcr_get_pcr_byId(pcr_select, pcrs, &pcr9_sha1, &pcr9_sha256, 9))
-  {
-    fprintf(stderr, "Could not retrieve pcr9s for verification of AK soft binding\n");
-    return false;
-  }
-
-  if (!pcr_get_pcr_byId(pcr_select, pcrs, pcr10_sha1, pcr10_sha256, 10))
-  {
-    fprintf(stderr, "Could not retrieve PCR10\n");
-    return false;
-  }
-
   unsigned char *akPub = NULL;
   unsigned char *digest_sha1 = NULL;
   unsigned char *digest_sha256 = NULL;
-  if (!openAKPub("/etc/tc/ak.pub.pem", &akPub))
-  {
+  
+  if (!openAKPub("/etc/tc/ak.pub.pem", &akPub)) {
     fprintf(stderr, "Could not read AK pub\n");
     return false;
   }
@@ -476,33 +363,19 @@ bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256, PCR
   if (md_len_sha256 <= 0)
     return false;
 
-  unsigned char *expected_PCR9sha1 = NULL;
-  unsigned char *expected_PCR9sha256 = NULL;
-
   u_int8_t *pcr_sha1;
   pcr_sha1 = calloc((SHA_DIGEST_LENGTH * 2 + 1), sizeof(u_int8_t));
   int k = SHA_DIGEST_LENGTH;
   for (i = 0; i < md_len_sha1; i++)
     pcr_sha1[k++] = (u_int8_t)digest_sha1[i];
   pcr_sha1[SHA_DIGEST_LENGTH * 2] = '\0';
-  expected_PCR9sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
-  md_len_sha1 = computePCRsoftBinding(pcr_sha1, "sha1", &expected_PCR9sha1, SHA_DIGEST_LENGTH * 2);
+  *expected_PCR9sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
+  md_len_sha1 = computePCRsoftBinding(pcr_sha1, "sha1", expected_PCR9sha1, SHA_DIGEST_LENGTH * 2);
   if (md_len_sha1 <= 0)
     return false;
 
-  fprintf(stdout, "expected_PCR9sha1 : ");
-  for (i = 0; i < md_len_sha1; i++)
-    fprintf(stdout, "%02X", expected_PCR9sha1[i]);
-  fprintf(stdout, "\n");
-  for (i = 0; i < md_len_sha1; i++)
-  {
-    if (pcr9_sha1.buffer[i] != expected_PCR9sha1[i])
-      return false;
-  }
-
   free(pcr_sha1);
   free(digest_sha1);
-  free(expected_PCR9sha1);
 
   u_int8_t *pcr_sha256;
   pcr_sha256 = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
@@ -513,25 +386,13 @@ bool PCR9_verification(TPM2B_DIGEST *pcr10_sha1, TPM2B_DIGEST *pcr10_sha256, PCR
   }
 
   pcr_sha256[SHA256_DIGEST_LENGTH * 2] = '\0';
-  expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH) * sizeof(unsigned char));
-  md_len_sha256 = computePCRsoftBinding(pcr_sha256, "sha256", &expected_PCR9sha256, SHA256_DIGEST_LENGTH * 2);
+  *expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH) * sizeof(unsigned char));
+  md_len_sha256 = computePCRsoftBinding(pcr_sha256, "sha256", expected_PCR9sha256, SHA256_DIGEST_LENGTH * 2);
   if (md_len_sha256 <= 0)
     return false;
 
-  fprintf(stdout, "expected_PCR9sha256 : ");
-  for (i = 0; i < md_len_sha256; i++)
-    fprintf(stdout, "%02X", expected_PCR9sha256[i]);
-  fprintf(stdout, "\n");
-
-  for (i = 0; i < md_len_sha256; i++)
-  {
-    if (pcr9_sha256.buffer[i] != expected_PCR9sha256[i])
-      return false;
-  }
-
   free(pcr_sha256);
   free(digest_sha256);
-  free(expected_PCR9sha256);
 
   free(akPub);
   return true;

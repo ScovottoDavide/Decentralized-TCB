@@ -1,7 +1,6 @@
 #include "whitelist_verify.h"
 
-int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned char **digest, int size)
-{
+int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned char **digest, int size) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
@@ -9,8 +8,7 @@ int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned
   OpenSSL_add_all_digests();
 
   md = EVP_get_digestbyname(sha_alg);
-  if (md == NULL)
-  {
+  if (md == NULL) {
     printf("Unknown message digest %s\n", sha_alg);
     return false;
   }
@@ -24,8 +22,7 @@ int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned
   return md_len;
 }
 
-int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size)
-{
+int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
@@ -33,8 +30,7 @@ int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsig
   OpenSSL_add_all_digests();
 
   md = EVP_get_digestbyname(sha_alg);
-  if (md == NULL)
-  {
+  if (md == NULL) {
     printf("Unknown message digest %s\n", sha_alg);
     return false;
   }
@@ -48,13 +44,11 @@ int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsig
   return md_len;
 }
 
-bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size)
-{
+bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size) {
   unsigned char digest[DIGEST_LEN];
   int file_path_len = 0;
   int i = 0;
-  for (i = 0; i < size; i++)
-  {
+  for (i = 0; i < size; i++) {
     fscanf(fp, "%s %d", white_entries[i].digest, &file_path_len);
     white_entries[i].digest[DIGEST_LEN] = '\0';
     white_entries[i].path = malloc(file_path_len * sizeof(char));
@@ -65,12 +59,9 @@ bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size)
 }
 
 /* returns the index of the white_entries vector if match is found, otherwise -1 is returned */
-int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, const struct whitelist_entry *white_entries, int white_entries_size)
-{
+int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, const struct whitelist_entry *white_entries, int white_entries_size) {
   int i;
-
-  for (i = 0; i < white_entries_size; i++)
-  {
+  for (i = 0; i < white_entries_size; i++) {
     if (strncmp(white_entries[i].path, imaPath, imaPath_len) == 0) // match
       return i;
   }
@@ -78,19 +69,24 @@ int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, co
 }
 
 int read_template_data(struct event *template, const struct whitelist_entry *white_entries, 
-    int white_entries_size, u_int8_t pcr_aggr[SHA256_DIGEST_LENGTH + 1], VERIFICATION_RESPONSE *ver_response)
+    int white_entries_size, unsigned char pcr10_sha256[SHA256_DIGEST_LENGTH + 1], unsigned char pcr10_sha1[SHA_DIGEST_LENGTH + 1], 
+    VERIFICATION_RESPONSE *ver_response)
 {
   int len, is_ima_template, is_imang_template, i, k = 0, j;
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
+  u_int8_t *pcr_concatenated_sha1 = calloc(SHA_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
   u_int8_t *entry_aggregate = NULL;
   u_int8_t *currentTemplateMD = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
+  u_int8_t *currentTemplateMD_sha1 = calloc(SHA_DIGEST_LENGTH + 1, sizeof(u_int8_t));
   u_int8_t currentEntryFileHash[SHA256_DIGEST_LENGTH + 1] = {0};
   u_int8_t acc = 0;
 
   /* Init empty pcr */
-  for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-  {
-    pcr_concatenated[i] = (u_int8_t)pcr_aggr[i];
+  for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+    pcr_concatenated[i] = (u_int8_t)pcr10_sha256[i];
+  }
+  for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
+    pcr_concatenated_sha1[i] = (u_int8_t)pcr10_sha1[i];
   }
 
   is_ima_template = strcmp(template->name, "ima") == 0 ? 1 : 0;
@@ -115,7 +111,7 @@ int read_template_data(struct event *template, const struct whitelist_entry *whi
     u_int32_t field_path_len;
     u_int8_t alg_field[8];      /* sha256:\0 */
     u_int8_t alg_sha1_field[6]; /* sha1:\0 */
-    u_int8_t *path_field;
+    u_int8_t *path_field = NULL;
 
     int is_sha1 = 0;
 
@@ -156,81 +152,81 @@ int read_template_data(struct event *template, const struct whitelist_entry *whi
     acc += sizeof path_field;
 
     int mdTemplate;
-    if (!is_sha1)
+    if (!is_sha1) {
       mdTemplate = computeTemplateDigest(entry_aggregate, "sha256", &currentTemplateMD, template->template_data_len);
-
+      mdTemplate = computeTemplateDigest(entry_aggregate, "sha1", &currentTemplateMD_sha1, template->template_data_len);
+    }
+      
     int mdPCR;
-    if (!is_sha1)
-    {
+    if (!is_sha1) {
       k = SHA256_DIGEST_LENGTH;
-      for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-      {
+      for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
         pcr_concatenated[k++] = currentTemplateMD[i];
       }
-      mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH * 2);
+      mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr10_sha256, SHA256_DIGEST_LENGTH * 2);
+      k = SHA_DIGEST_LENGTH;
+      for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        pcr_concatenated_sha1[k++] = currentTemplateMD_sha1[i];
+      }
+      mdPCR = computePCR10Aggr(pcr_concatenated_sha1, "sha1", &pcr10_sha1, SHA_DIGEST_LENGTH * 2);
     }
-    else
-    {
+    else {
       /* Here if it's a sha1 then is a violation because i'm using ima-ng sha256 */
       /* If violation --> 0xff instead of leaving 0x00 */
       k = SHA256_DIGEST_LENGTH;
       memset(pcr_concatenated + k, 0xff, SHA256_DIGEST_LENGTH);
-      mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr_aggr, SHA256_DIGEST_LENGTH * 2);
+      mdPCR = computePCR10Aggr(pcr_concatenated, "sha256", &pcr10_sha256, SHA256_DIGEST_LENGTH * 2);
+      k = SHA_DIGEST_LENGTH;
+      memset(pcr_concatenated_sha1 + k, 0xff, SHA_DIGEST_LENGTH);
+      mdPCR = computePCR10Aggr(pcr_concatenated_sha1, "sha1", &pcr10_sha1, SHA_DIGEST_LENGTH * 2);
     }
 
-    if (white_entries != NULL)
-    {
+    if (white_entries != NULL) {
       int entry_index = match_IMApath_Whitepath(path_field, field_path_len, white_entries, white_entries_size);
 
       unsigned char string_digest[DIGEST_LEN];
       int k = 0;
-      if (!is_sha1)
-      {
-        for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-        {
+      if (!is_sha1) {
+        for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
           sprintf(&string_digest[i * 2], "%02x", currentEntryFileHash[i]);
         }
       }
-      if (entry_index >= 0)
-      {
-        if (strcmp(white_entries[entry_index].digest, string_digest))
-        {
-          fprintf(stdout, "State Untrusted: ");
-          fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
-          /*if(ver_response->number_white_entries + 1 > white_entries_size) {
-            fprintf(stdout, "Expected untrusted entries limit exceeded\n");
-          } else{*/
+      if (entry_index >= 0) {
+        if (strcmp(white_entries[entry_index].digest, string_digest)) {
+          //fprintf(stdout, "State Untrusted: ");
+          //fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
+          if(ver_response->number_white_entries + 1 > white_entries_size) {
+            //fprintf(stdout, "Expected untrusted entries limit exceeded\n");
+          } else {
             ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)strlen(white_entries[entry_index].path);
             ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name = malloc(ver_response->untrusted_entries[ver_response->number_white_entries].name_len * sizeof(char));
             strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, strlen(white_entries[entry_index].path));
             ver_response->number_white_entries += 1;
-          //}
+          }
           return -2;
-        }
-        /*else
-        {
+        }/*else {
           fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
         }*/
       }
     }
+    free(path_field);
   }
-  free(currentTemplateMD);
-  free(pcr_concatenated);
+  free(currentTemplateMD); free(currentTemplateMD_sha1);
+  free(pcr_concatenated); free(pcr_concatenated_sha1);
   free(entry_aggregate);
   return 0;
 }
 
-int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG_BLOB ima_log_blob, VERIFICATION_RESPONSE *ver_response) {
+int verify_PCR10_whitelist(unsigned char **pcr10_sha1, unsigned char **pcr10_sha256, IMA_LOG_BLOB ima_log_blob, VERIFICATION_RESPONSE *ver_response) {
   struct event template;
   struct whitelist_entry *white_entries = NULL;
   FILE *whitelist_fp;
-  int num_entries = 0, i, j;
+  int num_entries = 0, i;
 
   whitelist_fp = fopen("whitelist", "rb");
   if (!whitelist_fp) {
     fprintf(stdout, "\nNo whitelist file found! Skipping whitelist verification!\n\n");
-  }
-  else {
+  } else {
     fscanf(whitelist_fp, "%d", &num_entries);
     white_entries = malloc(num_entries * sizeof(struct whitelist_entry));
     if (!white_entries) {
@@ -245,44 +241,25 @@ int verify_PCR10_whitelist(u_int8_t *pcr10_sha1, u_int8_t *pcr10_sha256, IMA_LOG
   // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
   ver_response->untrusted_entries = malloc(20 * sizeof(UNTRUSTED_PATH));
 
-  /* Prepare stating pcr10 */
-  u_int8_t *pcr_aggr;
-  pcr_aggr = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(u_int8_t));
-  
+  /* Prepare starting pcr10 */
+  *pcr10_sha1 = calloc(SHA_DIGEST_LENGTH + 1, sizeof(unsigned char));
+  *pcr10_sha256 = calloc(SHA256_DIGEST_LENGTH + 1, sizeof(unsigned char));
+
   for (i = 0; i < ima_log_blob.size; i++) {
     if (ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX) {
       fprintf(stdout, "%d ERROR: event name too long!\n", template.header.name_len);
-      free(pcr_aggr);
       free(white_entries);
       fclose(whitelist_fp);
       exit(-1);
     }
-
-    if (read_template_data(&ima_log_blob.logEntry[i], white_entries, num_entries, pcr_aggr, ver_response) == -1) {
+    if (read_template_data(&ima_log_blob.logEntry[i], white_entries, num_entries, *pcr10_sha256, *pcr10_sha1, ver_response) == -1) {
       printf("\nReading of measurement entry failed\n");
       exit(-1);
     }
   }
 
-  fprintf(stdout, "PCRAggr : ");
-  for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-    fprintf(stdout, "%02X", pcr_aggr[i]);
-  fprintf(stdout, "\n");
-
-  if (memcmp(pcr_aggr, pcr10_sha256, SHA256_DIGEST_LENGTH) == 0) {
-    if(ima_log_blob.wholeLog == 1){
-      // save to file ?
-    }
-    fprintf(stdout, "PCR10 verification successfull!\n");
-  }
-  else {
-    fprintf(stdout, "PCR10 verification failed!\n");
-  }
-
-  free(pcr_aggr);
   if (whitelist_fp != NULL)
     fclose(whitelist_fp);
   free(white_entries);
-
   return 0;
 }

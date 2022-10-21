@@ -45,7 +45,7 @@ int main() {
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/TPA_index_node1.txt", "r");
+  index_file = fopen("/etc/tc/TPA_index_node1.json", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;
@@ -80,7 +80,7 @@ int main() {
         exit(-1);
       }
       /**
-      Assumption: Ek is at NV-Index 0x80000000, AK is at NV-Index 0x80000001
+      Assumption: Ek is at NV-Index 0x81000000, AK is at NV-Index 0x81000001
       and they are the only persistent handles in NV-RAM.
       See if optimizable!
       **/
@@ -200,7 +200,7 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
     uint8_t last[4] = "done";
 
     // pcrs
-    bytes_to_send += sizeof(u_int8_t) + sizeof(TPML_PCR_SELECTION) + (sizeof TpaData.pcrs_blob.pcrs.count) + (sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count);
+    //bytes_to_send += sizeof(u_int8_t) + sizeof(TPML_PCR_SELECTION) + (sizeof TpaData.pcrs_blob.pcrs.count) + (sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count);
     // sig
     bytes_to_send += sizeof(u_int8_t) + sizeof(u_int16_t) + (sizeof(u_int8_t) * TpaData.sig_blob.size);
     // message
@@ -225,14 +225,14 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
       return -1;
     }
 
-    memcpy(to_send_data, &TpaData.pcrs_blob.tag, sizeof(u_int8_t));
+    /*memcpy(to_send_data, &TpaData.pcrs_blob.tag, sizeof(u_int8_t));
     acc += sizeof(u_int8_t);
     memcpy(to_send_data + acc, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION));
     acc += sizeof(TPML_PCR_SELECTION);
     memcpy(to_send_data + acc, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count);
     acc += sizeof TpaData.pcrs_blob.pcrs.count;
     memcpy(to_send_data + acc, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count);
-    acc += sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count;
+    acc += sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count;*/
 
     memcpy(to_send_data + acc, &TpaData.sig_blob.tag, sizeof(u_int8_t));
     acc += sizeof(u_int8_t);
