@@ -7,6 +7,7 @@
 #include "whitelist_verify.h"
 #include "../../WAM/WAM.h"
 
+void hex_print(uint8_t *raw_data, size_t raw_size);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
@@ -62,8 +63,6 @@ int main(int argc, char const *argv[])
       expected_size+=32;
       have_to_read = 1;
 
-      if(read_attest_message != NULL)
-        free(read_attest_message);
       read_attest_message = malloc(sizeof(uint8_t) * (1024 * 100 * 2));
       
       ch_read_attest.recv_bytes = 0;
@@ -101,22 +100,11 @@ int main(int argc, char const *argv[])
           // PCR10 calculation + whitelist verify
           fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
           verify_PCR10_whitelist(&pcr10_sha1, &pcr10_sha256, TpaData.ima_log_blob, &ver_response);
-          fprintf(stdout, "PCR9 sha1: ");
-          for(i = 0; i<SHA_DIGEST_LENGTH;i++)
-            fprintf(stdout, "%02X", pcr9_sha1[i]);
-          fprintf(stdout, "\n");
-          fprintf(stdout, "PCR10 sha1: ");
-          for(i = 0; i<SHA_DIGEST_LENGTH;i++)
-            fprintf(stdout, "%02X", pcr10_sha1[i]);
-          fprintf(stdout, "\n");
-          fprintf(stdout, "PCR9 sha256: ");
-          for(i = 0; i<SHA256_DIGEST_LENGTH;i++)
-            fprintf(stdout, "%02X", pcr9_sha256[i]);
-          fprintf(stdout, "\n");
-          fprintf(stdout, "PCR10 sha256: ");
-          for(i = 0; i<SHA256_DIGEST_LENGTH;i++)
-            fprintf(stdout, "%02X", pcr10_sha256[i]);
-          fprintf(stdout, "\n");
+
+          /*fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
+          fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
+          fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
+          fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);*/
 
           if (!tpm2_checkquote(TpaData, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
             fprintf(stderr, "Error while verifying quote!\n");
@@ -128,16 +116,15 @@ int main(int argc, char const *argv[])
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response);
 
-          for(i = 0; i < TpaData.ima_log_blob.size; i++){
+          free(TpaData.sig_blob.buffer); free(TpaData.message_blob.buffer);
+          for(i = 0; i < TpaData.ima_log_blob.size; i++)
             free(TpaData.ima_log_blob.logEntry[i].template_data);
-          }
           free(TpaData.ima_log_blob.logEntry);
-          free(TpaData.sig_blob.buffer);
-          free(TpaData.message_blob.buffer);
-          free(pcr10_sha1);
-          free(pcr10_sha256);
-          free(pcr9_sha1);
-          free(pcr9_sha256);
+          free(pcr10_sha1); free(pcr10_sha256); free(pcr9_sha1); free(pcr9_sha256);
+          for(i = 0; i < ver_response.number_white_entries; i++)
+            free(ver_response.untrusted_entries[i].untrusted_path_name);
+          free(ver_response.untrusted_entries);
+          free(read_attest_message);
         }
       }
     }
@@ -173,6 +160,8 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
 
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "read_index_1")->valuestring, INDEX_HEX_SIZE, read_indexes[0]->index, INDEX_SIZE);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key_1")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes[0]->keys.pub, ED_PUBLIC_KEY_BYTES);
+
+  free(data);
 }
 
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message) {
@@ -194,7 +183,7 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message) {
   acc += sizeof(u_int16_t);
   TpaData->message_blob.buffer = malloc(TpaData->message_blob.size * sizeof(u_int8_t));
   memcpy(TpaData->message_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData->message_blob.size);
-  acc += sizeof(u_int8_t) * sizeof(u_int8_t) * TpaData->message_blob.size;
+  acc += sizeof(u_int8_t) * TpaData->message_blob.size;
 
   // IMA
   memcpy(&TpaData->ima_log_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
@@ -259,11 +248,8 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
     fprintf(stdout, "%02x", ch_send->current_index.index[i]);
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
   fprintf(stdout, "\n\t DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
-
+  
   free(response_buff);
-  for(i = 0; i < ver_response.number_white_entries; i++)
-    free(ver_response.untrusted_entries[i].untrusted_path_name);
-  free(ver_response.untrusted_entries);
 }
 
 bool openAKPub(const char *path, unsigned char **akPub) {
@@ -408,4 +394,12 @@ bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expecte
 
   free(akPub);
   return true;
+}
+
+void hex_print(uint8_t *raw_data, size_t raw_size){
+  int i;
+
+  for(i = 0; i < raw_size; i++)
+    fprintf(stdout, "%02X", raw_data[i]);
+  fprintf(stdout, "\n");
 }

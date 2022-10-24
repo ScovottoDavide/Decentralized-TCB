@@ -190,12 +190,9 @@ bool verify(void)
     return false;
   }
 
-  for(int i = 0; i<ctx.msg_hash.size; i++)
-    fprintf(stdout, "%02x", ctx.msg_hash.buffer[i]);
-  fprintf(stdout, "\n");
   rc = EVP_PKEY_verify(pkey_ctx, ctx.signature.buffer, ctx.signature.size, ctx.msg_hash.buffer, ctx.msg_hash.size);
-  if (!rc) {
-    fprintf(stderr, "Error validating signed message with public key provided\n");
+  if (rc != 1) {
+    fprintf(stderr, "Error validating signed message with public key provided: rc = %d\n", rc);
     fprintf(stdout, "\n");
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(pkey_ctx);
@@ -239,6 +236,7 @@ bool tpm2_checkquote(TO_SEND TpaData, unsigned char *pcr10_sha256, unsigned char
     fprintf(stdout, "OOM \n");
     return false;
   }
+
   msg->size = TpaData.message_blob.size;
   memcpy(msg->attestationData, TpaData.message_blob.buffer, msg->size);
 
@@ -256,7 +254,6 @@ bool tpm2_checkquote(TO_SEND TpaData, unsigned char *pcr10_sha256, unsigned char
     fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
     return false;
   }
-  free(msg);
 
   // Recompute the signature in order to compare it later with the one loaded in ctx.signature
   if (!tpm2_openssl_hash_compute_data(ctx.halg, msg->attestationData, msg->size, &ctx.msg_hash)) {

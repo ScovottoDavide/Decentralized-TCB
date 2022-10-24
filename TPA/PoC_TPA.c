@@ -199,8 +199,6 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
     int i = 0;
     uint8_t last[4] = "done";
 
-    // pcrs
-    //bytes_to_send += sizeof(u_int8_t) + sizeof(TPML_PCR_SELECTION) + (sizeof TpaData.pcrs_blob.pcrs.count) + (sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count);
     // sig
     bytes_to_send += sizeof(u_int8_t) + sizeof(u_int16_t) + (sizeof(u_int8_t) * TpaData.sig_blob.size);
     // message
@@ -225,16 +223,7 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
       return -1;
     }
 
-    /*memcpy(to_send_data, &TpaData.pcrs_blob.tag, sizeof(u_int8_t));
-    acc += sizeof(u_int8_t);
-    memcpy(to_send_data + acc, &TpaData.pcrs_blob.pcr_selection, sizeof(TPML_PCR_SELECTION));
-    acc += sizeof(TPML_PCR_SELECTION);
-    memcpy(to_send_data + acc, &TpaData.pcrs_blob.pcrs.count, sizeof TpaData.pcrs_blob.pcrs.count);
-    acc += sizeof TpaData.pcrs_blob.pcrs.count;
-    memcpy(to_send_data + acc, &TpaData.pcrs_blob.pcrs.pcr_values, sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count);
-    acc += sizeof(TPML_DIGEST) * TpaData.pcrs_blob.pcrs.count;*/
-
-    memcpy(to_send_data + acc, &TpaData.sig_blob.tag, sizeof(u_int8_t));
+    memcpy(to_send_data, &TpaData.sig_blob.tag, sizeof(u_int8_t));
     acc += sizeof(u_int8_t);
     memcpy(to_send_data + acc, &TpaData.sig_blob.size, sizeof(u_int16_t));
     acc += sizeof(u_int16_t);
@@ -246,7 +235,7 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context)
     memcpy(to_send_data + acc, &TpaData.message_blob.size, sizeof(u_int16_t));
     acc += sizeof(u_int16_t);
     memcpy(to_send_data + acc, &TpaData.message_blob.buffer, sizeof(u_int8_t) * TpaData.message_blob.size);
-    acc += sizeof(u_int8_t) * sizeof(u_int8_t) * TpaData.message_blob.size;
+    acc += sizeof(u_int8_t) * TpaData.message_blob.size;
 
     memcpy(to_send_data + acc, &TpaData.ima_log_blob.tag, sizeof(u_int8_t));
     acc += sizeof(u_int8_t);

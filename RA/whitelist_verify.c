@@ -198,9 +198,9 @@ int read_template_data(struct event *template, const struct whitelist_entry *whi
           if(ver_response->number_white_entries + 1 > white_entries_size) {
             //fprintf(stdout, "Expected untrusted entries limit exceeded\n");
           } else {
-            ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)strlen(white_entries[entry_index].path);
+            ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)field_path_len;
             ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name = malloc(ver_response->untrusted_entries[ver_response->number_white_entries].name_len * sizeof(char));
-            strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, strlen(white_entries[entry_index].path));
+            strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, field_path_len);
             ver_response->number_white_entries += 1;
           }
           return -2;
@@ -239,7 +239,7 @@ int verify_PCR10_whitelist(unsigned char **pcr10_sha1, unsigned char **pcr10_sha
   ver_response->tag = 5;
   ver_response->number_white_entries = 0;
   // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
-  ver_response->untrusted_entries = malloc(20 * sizeof(UNTRUSTED_PATH));
+  ver_response->untrusted_entries = malloc(num_entries * sizeof(UNTRUSTED_PATH));
 
   /* Prepare starting pcr10 */
   *pcr10_sha1 = calloc(SHA_DIGEST_LENGTH + 1, sizeof(unsigned char));
