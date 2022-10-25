@@ -11,9 +11,9 @@
 bool legal_int(const char *str);
 void hex_print(uint8_t *raw_data, size_t raw_size);
 bool openAKPub(const char *path, unsigned char **akPub);
-//int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
-bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256);
+bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256, AK_FILE_TABLE *ak_table,
+            TO_SEND TpaData, int nodes_number);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
       IOTA_Index **read_indexes, IOTA_Index **read_indexes_AkPub, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message);
@@ -50,7 +50,7 @@ int main(int argc, char const *argv[]) {
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/RA_index_node1.json", "r");
+  index_file = fopen("/etc/tc/RA_index_node2.json", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;
@@ -111,7 +111,7 @@ int main(int argc, char const *argv[]) {
           
           // Get also pcr10 since we're reading pcrs here
           fprintf(stdout, "Calculating PCR9s ...\n");
-          if (!PCR9_calculation(&pcr9_sha1, &pcr9_sha256)) {
+          if (!PCR9_calculation(&pcr9_sha1, &pcr9_sha256, ak_table, TpaData, nodes_number)) {
             fprintf(stderr, "PCR9 calculation failed\n");
             exit(-1);
           }
@@ -121,10 +121,10 @@ int main(int argc, char const *argv[]) {
           verify_PCR10_whitelist(&pcr10_sha1, &pcr10_sha256, TpaData.ima_log_blob, &ver_response);
           fprintf(stdout, "DONE\n");
 
-          /*fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
+          fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
           fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
           fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
-          fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);*/
+          fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);
 
           if (!tpm2_checkquote(TpaData, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
             fprintf(stderr, "Error while verifying quote!\n");
@@ -361,12 +361,13 @@ int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, 
   return md_len;
 }
 
-bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256) {
+bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256, AK_FILE_TABLE *ak_table,
+            TO_SEND TpaData, int nodes_number) {
   int i;
-  unsigned char *akPub = NULL;
-  unsigned char *digest_sha1 = NULL;
-  unsigned char *digest_sha256 = NULL;
+  unsigned char *akPub = NULL, *digest_sha1 = NULL, *digest_sha256 = NULL;
+  u_int8_t *ak_path;
   
+  ak_path = get_ak_file_path(ak_table, TpaData, nodes_number);
   if (!openAKPub("/etc/tc/ak.pub.pem", &akPub)) {
     fprintf(stderr, "Could not read AK pub\n");
     return false;

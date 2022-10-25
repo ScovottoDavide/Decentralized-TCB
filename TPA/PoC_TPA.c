@@ -45,7 +45,7 @@ int main() {
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/TPA_index_node1.json", "r");
+  index_file = fopen("/etc/tc/TPA_index_node2.json", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;

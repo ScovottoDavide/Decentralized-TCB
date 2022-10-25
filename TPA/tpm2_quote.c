@@ -888,11 +888,11 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytes
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  /*res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
+  res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
   if (!res){
     fprintf(stderr, "Error while printing PCRS to stdout\n");
     return TSS2_ESYS_RC_BAD_VALUE;
-  }*/
+  }
 
   // Calculate the digest from our selected PCR values (to ensure correctness)
   TPM2B_DIGEST pcr_digest = TPM2B_TYPE_INIT(TPM2B_DIGEST, buffer);
