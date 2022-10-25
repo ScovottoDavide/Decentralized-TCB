@@ -368,11 +368,14 @@ bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expecte
   u_int8_t *ak_path;
   
   ak_path = get_ak_file_path(ak_table, TpaData, nodes_number);
-  if (!openAKPub("/etc/tc/ak.pub.pem", &akPub)) {
+  if(ak_path == NULL){
+    fprintf(stdout, "Error while getting Ak path\n");
+    return false;
+  }
+  if (!openAKPub(ak_path, &akPub)) {
     fprintf(stderr, "Could not read AK pub\n");
     return false;
   }
-
   digest_sha1 = malloc((EVP_MAX_MD_SIZE) * sizeof(unsigned char));
   digest_sha256 = malloc((EVP_MAX_MD_SIZE) * sizeof(unsigned char));
   int md_len_sha1 = computeDigestEVP(akPub, "sha1", &digest_sha1);
