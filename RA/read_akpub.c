@@ -47,17 +47,18 @@ bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE **ak_table, int no
     while(ch_read_ak->recv_msg == 0)
         WAM_read(ch_read_ak, expected_message, &expected_size);
     
-    akPub = malloc(ch_read_ak->recv_bytes * sizeof(unsigned char));
+    akPub = malloc((ch_read_ak->recv_bytes + 1) * sizeof(unsigned char));
     memcpy(akPub, expected_message, ch_read_ak->recv_bytes);
+    akPub[ch_read_ak->recv_bytes] = '\0';
 
     // compute the filename and the whole path
     rand_str(filename, FILENAME_LEN);
     strcat(filename, ".pub.pem");
     filename[FILENAME_LEN + FILE_PEM_LEN] = '\0';
-    u_int8_t *full_path = malloc((sizeof base_url + strlen(filename) + 1) * sizeof(u_int8_t));
+    u_int8_t *full_path = malloc((sizeof base_url + sizeof filename + 1) * sizeof(u_int8_t));
     memcpy(full_path, base_url, sizeof base_url*sizeof(u_int8_t));
-    memcpy(full_path + sizeof base_url, filename, strlen(filename));
-    full_path[sizeof base_url + strlen(filename)] = '\0';
+    memcpy(full_path + sizeof base_url, filename, sizeof filename);
+    full_path[sizeof base_url + sizeof filename] = '\0';
 
     // compute ak digest 
     digest = malloc((SHA256_DIGEST_LENGTH + 1)*sizeof(unsigned char));
@@ -68,9 +69,9 @@ bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE **ak_table, int no
 
     // save data in the struct
     *ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
-    ak_table[0]->path_name = malloc((strlen(base_url) + strlen(filename)) * sizeof(u_int8_t));
+    ak_table[0]->path_name = malloc((sizeof base_url + sizeof filename) * sizeof(u_int8_t));
     memcpy(ak_table[0]->ak_md, digest, SHA256_DIGEST_LENGTH * sizeof(unsigned char));
-    strncpy(ak_table[0]->path_name, full_path, strlen(base_url) + strlen(filename));
+    strncpy(ak_table[0]->path_name, full_path, sizeof  base_url + sizeof filename);
 
     // save aks to file  
     ak_files = malloc(nodes_number * sizeof(FILE *));
