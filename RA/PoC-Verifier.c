@@ -1,30 +1,32 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <openssl/rand.h>
 #include "whitelist_verify.h"
-#include "../../WAM/WAM.h"
+#include "/home/pi/WAM/WAM.h"
 
+bool legal_int(const char *str);
 void hex_print(uint8_t *raw_data, size_t raw_size);
 bool openAKPub(const char *path, unsigned char **akPub);
-int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
+//int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
 bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256);
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index **read_indexes);
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
+      IOTA_Index **read_indexes, IOTA_Index **read_indexes_AkPub, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response);
 
-int main(int argc, char const *argv[])
-{
+int main(int argc, char const *argv[]) {
   int i, j;
-  TO_SEND TpaData; VERIFICATION_RESPONSE ver_response;
+  TO_SEND TpaData; VERIFICATION_RESPONSE ver_response; AK_FILE_TABLE *ak_table;
   FILE *index_file;
   
-  IOTA_Index heartBeat_index, *read_indexes, write_response_index;
+  IOTA_Index heartBeat_index, *read_indexes, *read_indexes_AkPub, write_response_index;
   uint8_t mykey[]="supersecretkeyforencryptionalby";
-	WAM_channel ch_read_hearbeat, ch_read_attest, ch_write_response;
+	WAM_channel ch_read_hearbeat, ch_read_attest, ch_write_response, ch_read_ak;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
@@ -34,28 +36,45 @@ int main(int argc, char const *argv[])
 
   unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL, *pcr10_sha256 = NULL, *pcr10_sha1 = NULL;
 
+  if(argc != 2){
+    fprintf(stdout, "Please specify the number of nodes\n");
+    return -1;
+  }    
+  if(atoi(argv[1]) < 0 || !legal_int(argv[1])){
+    fprintf(stdout, "Entered parameter is NaN or it has to be greater than 0\n");
+    return -1;
+  }
+  int nodes_number = atoi(argv[1]);
+
   IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/RA_index_node2.json", "r");
+  index_file = fopen("/etc/tc/RA_index_node1.json", "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;
   }
-  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, &read_indexes);
+  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, &read_indexes, &read_indexes_AkPub, nodes_number);
   fclose(index_file);
 
-  // Set read index of heatbeat
+  // Set read index of heartbeat
   WAM_init_channel(&ch_read_hearbeat, 1, &privatenet, &k, &a);
 	set_channel_index_read(&ch_read_hearbeat, heartBeat_index.index);
-  // Set read write index from the file
+  // Set index for reading TpaData
   WAM_init_channel(&ch_read_attest, 1, &privatenet, &k, &a);
   set_channel_index_read(&ch_read_attest, read_indexes[0].index);
+  // Set index for reading Tpas AK
+  WAM_init_channel(&ch_read_ak, 1, &privatenet, &k, &a);
+  set_channel_index_read(&ch_read_ak, read_indexes_AkPub[0].index);
 
   // Set write index for response to heartbeat 
   WAM_init_channel(&ch_write_response, 1, &privatenet, &k, &a);
   set_channel_index_write(&ch_write_response, write_response_index);
+
+  // First get all the AKs and construct table in order to recognize each TpaData received from the various Tpas
+  /* For now 1 node, 1 channel, 1 index! */ 
+  read_and_save_AKs(&ch_read_ak, &ak_table, nodes_number);
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
@@ -100,13 +119,14 @@ int main(int argc, char const *argv[])
           // PCR10 calculation + whitelist verify
           fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
           verify_PCR10_whitelist(&pcr10_sha1, &pcr10_sha256, TpaData.ima_log_blob, &ver_response);
+          fprintf(stdout, "DONE\n");
 
           /*fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
           fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
           fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
           fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);*/
 
-          if (!tpm2_checkquote(TpaData, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
+          if (!tpm2_checkquote(TpaData, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
             fprintf(stderr, "Error while verifying quote!\n");
             exit(-1);
           }
@@ -116,7 +136,7 @@ int main(int argc, char const *argv[])
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response);
 
-          free(TpaData.sig_blob.buffer); free(TpaData.message_blob.buffer);
+          free(TpaData.sig_blob.buffer); free(TpaData.message_blob.buffer); free(TpaData.ak_digest_blob.buffer);
           for(i = 0; i < TpaData.ima_log_blob.size; i++)
             free(TpaData.ima_log_blob.logEntry[i].template_data);
           free(TpaData.ima_log_blob.logEntry);
@@ -133,11 +153,20 @@ int main(int argc, char const *argv[])
   return 0;
 }
 
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index **read_indexes) {
+bool legal_int(const char *str) {
+    while (*str)
+        if (!isdigit(*str++))
+            return false;
+    return true;
+}
+
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
+      IOTA_Index **read_indexes, IOTA_Index **read_indexes_AkPub, int nodes_number) {
   int len_file;
   char *data = NULL;
 
-  *read_indexes = malloc(sizeof(IOTA_Index));
+  *read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
+  *read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
 
   //get len of file
   fseek(index_file, 0, SEEK_END);
@@ -160,6 +189,9 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
 
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "read_index_1")->valuestring, INDEX_HEX_SIZE, read_indexes[0]->index, INDEX_SIZE);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key_1")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes[0]->keys.pub, ED_PUBLIC_KEY_BYTES);
+
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_read_1")->valuestring, INDEX_HEX_SIZE, read_indexes_AkPub[0]->index, INDEX_SIZE);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_read_pubkey_1")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_AkPub[0]->keys.pub, ED_PUBLIC_KEY_BYTES);
 
   free(data);
 }
@@ -210,6 +242,14 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message) {
     memcpy(TpaData->ima_log_blob.logEntry[i].template_data, read_attest_message + acc, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
     acc += TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
   }
+  // AK MD
+  memcpy(&TpaData->ak_digest_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
+  acc += sizeof(u_int8_t);
+  memcpy(&TpaData->ak_digest_blob.size, read_attest_message + acc, sizeof(u_int16_t));
+  acc += sizeof(u_int16_t);
+  TpaData->ak_digest_blob.buffer = malloc(TpaData->ak_digest_blob.size * sizeof(u_int8_t));
+  memcpy(TpaData->ak_digest_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData->ak_digest_blob.size);
+  //TpaData->ak_digest_blob.buffer[TpaData->ak_digest_blob.size] = '\0';
 }
 
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
@@ -296,29 +336,6 @@ bool openAKPub(const char *path, unsigned char **akPub) {
   free(line);
   free(buff);
   return true;
-}
-
-int computeDigestEVP(unsigned char *akPub, const char *sha_alg, unsigned char **digest) {
-  EVP_MD_CTX *mdctx;
-  const EVP_MD *md;
-  unsigned int md_len, i;
-
-  OpenSSL_add_all_digests();
-
-  md = EVP_get_digestbyname(sha_alg);
-  if (md == NULL)
-  {
-    printf("Unknown message digest %s\n", sha_alg);
-    return false;
-  }
-
-  mdctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx, md, NULL);
-  EVP_DigestUpdate(mdctx, akPub, strlen(akPub));
-  EVP_DigestFinal_ex(mdctx, *digest, &md_len);
-  EVP_MD_CTX_free(mdctx);
-
-  return md_len;
 }
 
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size) {

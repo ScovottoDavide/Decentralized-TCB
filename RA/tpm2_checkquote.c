@@ -9,7 +9,7 @@ struct tpm2_verifysig_ctx
   TPMS_ATTEST attest;
   TPM2B_DATA extra_data;
   TPM2B_MAX_BUFFER signature;
-  const char *pubkey_file_path;
+  u_int8_t *pubkey_file_path;
 };
 
 static tpm2_verifysig_ctx ctx = {
@@ -18,10 +18,19 @@ static tpm2_verifysig_ctx ctx = {
     .pcr_hash = TPM2B_TYPE_INIT(TPM2B_DIGEST, buffer),
 };
 
+u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_number) {
+  int i;
+
+  for(i = 0; i < nodes_number; i++) {
+    if(!memcmp(ak_table[i].ak_md, TpaData.ak_digest_blob.buffer, TpaData.ak_digest_blob.size))
+      return ak_table[i].path_name;
+  }
+  return NULL;
+}
+
 bool calculate_pcr_digest(unsigned char *pcr10_sha256, unsigned char *pcr10_sha1, unsigned char *pcr9_sha256, unsigned char *pcr9_sha1,
                             TPMI_ALG_HASH hash_alg, TPM2B_DIGEST *digest){
   
-
   if (hash_alg != TPM2_ALG_SHA256) {
     fprintf(stderr, "Wrong HashAlgo\n");
     return false;
@@ -71,11 +80,8 @@ TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest)
   return TSS2_RC_SUCCESS;
 }
 
-bool tpm2_openssl_hash_compute_data(TPMI_ALG_HASH halg, BYTE *buffer, UINT16 length, TPM2B_DIGEST *digest)
-{
-
-  if (halg != TPM2_ALG_SHA256)
-  {
+bool tpm2_openssl_hash_compute_data(TPMI_ALG_HASH halg, BYTE *buffer, UINT16 length, TPM2B_DIGEST *digest) {
+  if (halg != TPM2_ALG_SHA256) {
     fprintf(stderr, "Wrong HashAlgo\n");
     return false;
   }
@@ -89,23 +95,20 @@ bool tpm2_openssl_hash_compute_data(TPMI_ALG_HASH halg, BYTE *buffer, UINT16 len
     return false;
 
   int res = EVP_DigestInit_ex(mdctx, md, NULL);
-  if (!res)
-  {
+  if (!res) {
     EVP_MD_CTX_destroy(mdctx);
     return false;
   }
 
   res = EVP_DigestUpdate(mdctx, buffer, length);
-  if (!res)
-  {
+  if (!res) {
     EVP_MD_CTX_destroy(mdctx);
     return false;
   }
 
   unsigned size = EVP_MD_size(md);
   res = EVP_DigestFinal_ex(mdctx, digest->buffer, &size);
-  if (!res)
-  {
+  if (!res) {
     EVP_MD_CTX_destroy(mdctx);
     return false;
   }
@@ -115,8 +118,7 @@ bool tpm2_openssl_hash_compute_data(TPMI_ALG_HASH halg, BYTE *buffer, UINT16 len
   return true;
 }
 
-bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey)
-{
+bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey) {
   BIO *bio = NULL;
   EVP_PKEY *p = NULL;
 
@@ -134,20 +136,16 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey)
   return true;
 }
 
-bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest)
-{
+bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest) {
   // Sanity check -- they should at least be same size!
-  if (quoteDigest->size != pcr_digest->size)
-  {
+  if (quoteDigest->size != pcr_digest->size) {
     fprintf(stderr, "FATAL ERROR: PCR values failed to match quote's digest!\n");
     return false;
   }
   // Compare running digest with quote's digest
   int k;
-  for (k = 0; k < quoteDigest->size; k++)
-  {
-    if (quoteDigest->buffer[k] != pcr_digest->buffer[k])
-    {
+  for (k = 0; k < quoteDigest->size; k++) {
+    if (quoteDigest->buffer[k] != pcr_digest->buffer[k]) {
       fprintf(stderr, "FATAL ERROR: PCR values failed to match quote's digest!\n");
       return false;
     }
@@ -155,8 +153,7 @@ bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_diges
   return true;
 }
 
-bool verify(void)
-{
+bool verify(void) {
   bool res;
   EVP_PKEY_CTX *pkey_ctx = NULL;
 
@@ -176,7 +173,7 @@ bool verify(void)
 
   int rc = EVP_PKEY_verify_init(pkey_ctx);
   if (!rc) {
-    fprintf(stderr, "EVP_PKEY_verify_init failed\n");
+    fprintf(stderr, "EVP_PKEY_verify_init failed: %d\n", rc);
     EVP_PKEY_free(pkey);
     EVP_PKEY_CTX_free(pkey_ctx);
     return false;
@@ -219,13 +216,15 @@ bool verify(void)
   return true;
 }
 
-bool tpm2_checkquote(TO_SEND TpaData, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
+bool tpm2_checkquote(TO_SEND TpaData, AK_FILE_TABLE *ak_table, int nodes_number, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
                     unsigned char *pcr9_sha256, unsigned char *pcr9_sha1) {
   TSS2_RC tss_r = TSS2_RC_SUCCESS;
   bool res;
   int i;
 
-  ctx.pubkey_file_path = "/etc/tc/ak.pub.pem";
+  //ctx.pubkey_file_path = "/etc/tc/ak.pub.pem";
+  ctx.pubkey_file_path = get_ak_file_path(ak_table, TpaData, nodes_number);
+  fprintf(stdout, "ak path: %s\n", ctx.pubkey_file_path);
   ctx.halg = TPM2_ALG_SHA256;
 
   ctx.extra_data.size = TpaData.nonce_blob.size;

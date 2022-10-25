@@ -11,6 +11,8 @@
 #include <tss2/tss2_tpm2_types.h>
 #include <tss2/tss2_mu.h>
 
+#include "read_akpub.h"
+
 #define BUFFER_SIZE(type, field) (sizeof((((type *)NULL)->field)))
 #define TPM2B_TYPE_INIT(type, field) { .size = BUFFER_SIZE(type, field), }
 
@@ -56,10 +58,17 @@ typedef struct {
 } IMA_LOG_BLOB;
 
 typedef struct {
+  u_int8_t tag; // 3
+  u_int16_t size;
+  u_int8_t *buffer;
+} AK_DIGEST_BLOB;
+
+typedef struct {
   NONCE_BLOB nonce_blob;
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
   IMA_LOG_BLOB ima_log_blob;
+  AK_DIGEST_BLOB ak_digest_blob;
 } TO_SEND;
 
 typedef struct {
@@ -102,6 +111,8 @@ typedef struct {
    BYTE   attestationData[sizeof(TPMS_ATTEST)];
  } TPM2B_ATTEST;
 */
+
+u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_number);
 TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest);
 bool tpm2_openssl_hash_compute_data(TPMI_ALG_HASH halg, BYTE *buffer, UINT16 length, TPM2B_DIGEST *digest);
 bool calculate_pcr_digest(unsigned char *pcr10_sha256, unsigned char *pcr10_sha1, unsigned char *pcr9_sha256, unsigned char *pcr9_sha1,
@@ -111,5 +122,5 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey);
 bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest);
 bool verify(void);
 
-bool tpm2_checkquote(TO_SEND TpaData, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1, unsigned char *pcr9_sha256, 
-  unsigned char *pcr9_sha1);
+bool tpm2_checkquote(TO_SEND TpaData, AK_FILE_TABLE *ak_table, int nodes_number, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
+                    unsigned char *pcr9_sha256, unsigned char *pcr9_sha1);
