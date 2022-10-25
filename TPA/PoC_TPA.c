@@ -197,21 +197,19 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context) {
   TPMS_CAPABILITY_DATA *capabilityData;
   TPMI_YES_NO moreData;
 
-  printf("\nReading persistent handles!\n");
+  //printf("\nReading persistent handles!\n");
   tss_r = Esys_GetCapability(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
     ESYS_TR_NONE, capability, property,
     propertyCount, &moreData, &capabilityData);
-    if (tss_r != TSS2_RC_SUCCESS)
-    {
+    if (tss_r != TSS2_RC_SUCCESS) {
       printf("Error while reading persistent handles\n");
       return -1;
     }
     int i = 0;
-    printf("Persistent handles present in NVRAM are %d\n", capabilityData->data.handles.count);
-    for (i = 0; i < capabilityData->data.handles.count; i++)
-    {
+    //printf("Persistent handles present in NVRAM are %d\n", capabilityData->data.handles.count);
+    /*for (i = 0; i < capabilityData->data.handles.count; i++) {
       printf("Persistent Handle: 0x%X\n", capabilityData->data.handles.handle[i]);
-    }
+    }*/
     return capabilityData->data.handles.count;
 }
 

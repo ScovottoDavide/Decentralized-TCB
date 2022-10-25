@@ -851,53 +851,48 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytes
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  fprintf(stdout, "quoted: ");
+  /*fprintf(stdout, "quoted: ");
   for (i = 0; i < ctx.quoted->size; i++)
     fprintf(stdout, "%02x", ctx.quoted->attestationData[i]);
   fprintf(stdout, "\nsignature: \n");
-  if (ctx.signature->sigAlg == TPM2_ALG_RSASSA)
-  {
+  if (ctx.signature->sigAlg == TPM2_ALG_RSASSA){
     const char alg[6] = "rsassa";
     fprintf(stdout, "\t alg: %s\n", alg);
   }
-  else
-  {
+  else {
     fprintf(stderr, "Signature scheme does not match. An error has not been detected before!\n");
     return TSS2_ESYS_RC_BAD_VALUE;
   }
   fprintf(stdout, "\t sig: ");
   for (i = 0; i < ctx.signature->signature.rsassa.sig.size; i++)
     fprintf(stdout, "%02x", ctx.signature->signature.rsassa.sig.buffer[i]);
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\n");*/
+  fprintf(stdout, "Quote generated!\nSignature computed!\n");
 
   // Filter out invalid/unavailable PCR Selections
-  if (!pcr_check_pcr_selection(&ctx.cap_data, &ctx.pcr_selections))
-  {
+  if (!pcr_check_pcr_selection(&ctx.cap_data, &ctx.pcr_selections)) {
     fprintf(stderr, "Cannot filter unavailable PCR values for quote!\n");
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
   // Read PCRs from TPM
   tss_r = pcr_read_pcr_values(esys_ctx, &ctx.pcr_selections, &ctx.pcrs);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
+  if (tss_r != TSS2_RC_SUCCESS) {
     fprintf(stderr, "Error while reading PCRs from TPM\n");
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
   tss_r = get_internal_attested_data(ctx.quoted, &ctx.attest);
-  if (tss_r != TSS2_RC_SUCCESS)
-  {
+  if (tss_r != TSS2_RC_SUCCESS) {
     fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
-  if (!res)
-  {
+  /*res = pcr_print(&ctx.pcr_selections, &ctx.pcrs);
+  if (!res){
     fprintf(stderr, "Error while printing PCRS to stdout\n");
     return TSS2_ESYS_RC_BAD_VALUE;
-  }
+  }*/
 
   // Calculate the digest from our selected PCR values (to ensure correctness)
   TPM2B_DIGEST pcr_digest = TPM2B_TYPE_INIT(TPM2B_DIGEST, buffer);
