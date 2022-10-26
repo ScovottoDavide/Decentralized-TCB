@@ -21,7 +21,7 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub);
 
-int main() {
+int main(int argc, char *argv[]) {
   // TPM
   TSS2_RC tss_r;
   ESYS_CONTEXT *esys_context = NULL;
@@ -44,8 +44,13 @@ int main() {
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
 							 .tls = false};
+  
+  if(argc != 2){
+    fprintf(stdout, "Please specify the file path of the 'indexation' file\n");
+    return -1;
+  }    
 
-  index_file = fopen("/etc/tc/TPA_index_node2.json", "r");
+  index_file = fopen(argv[1], "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return -1;

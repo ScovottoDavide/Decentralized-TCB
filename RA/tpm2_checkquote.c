@@ -20,7 +20,6 @@ static tpm2_verifysig_ctx ctx = {
 
 u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_number) {
   int i;
-
   for(i = 0; i < nodes_number; i++) {
     if(!memcmp(ak_table[i].ak_md, TpaData.ak_digest_blob.buffer, TpaData.ak_digest_blob.size))
       return ak_table[i].path_name;
@@ -125,7 +124,7 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey) {
   bio = BIO_new_file(path, "rb");
   if (!bio)
     return false;
-  p = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+  p = PEM_read_bio_PUBKEY(bio, &p, NULL, NULL);
   if (!p) {
     fprintf(stderr, "Failed to convert public key from file '%s'\n", path);
     BIO_free(bio);
@@ -159,76 +158,69 @@ bool verify(void) {
 
   // Get the AK PubKey from file
   EVP_PKEY *pkey = NULL;
+
   tpm2_public_load_pkey(ctx.pubkey_file_path, &pkey);
 
   pkey_ctx = EVP_PKEY_CTX_new(pkey, NULL);
   if (!pkey_ctx) {
     fprintf(stderr, "EVP_PKEY_CTX_new failed\n");
-    return false;
+    goto end;
   }
 
   const EVP_MD *md = EVP_sha256(); // ctx.sig_hash_algorithm = TPM2_ALG_SHA256
   if (!md)
-    return false;
+    goto end;
 
   int rc = EVP_PKEY_verify_init(pkey_ctx);
   if (!rc) {
-    fprintf(stderr, "EVP_PKEY_verify_init failed: %d\n", rc);
-    EVP_PKEY_free(pkey);
-    EVP_PKEY_CTX_free(pkey_ctx);
-    return false;
+    fprintf(stderr, "EVP_PKEY_verify_init failed\n", rc);
+    goto end;
   }
 
   rc = EVP_PKEY_CTX_set_signature_md(pkey_ctx, md);
   if (!rc) {
     fprintf(stderr, "EVP_PKEY_CTX_set_signature_md failed\n");
-    EVP_PKEY_free(pkey);
-    EVP_PKEY_CTX_free(pkey_ctx);
-    return false;
+    goto end;
   }
 
   rc = EVP_PKEY_verify(pkey_ctx, ctx.signature.buffer, ctx.signature.size, ctx.msg_hash.buffer, ctx.msg_hash.size);
   if (rc != 1) {
     fprintf(stderr, "Error validating signed message with public key provided: rc = %d\n", rc);
-    fprintf(stdout, "\n");
-    EVP_PKEY_free(pkey);
-    EVP_PKEY_CTX_free(pkey_ctx);
-    return false;
+    goto end;
   }
 
   // Ensure nonce is the same as given
   if (ctx.attest.extraData.size != ctx.extra_data.size || memcmp(ctx.attest.extraData.buffer, ctx.extra_data.buffer, ctx.extra_data.size) != 0) {
     fprintf(stderr, "Nonce from quote does not match nonce read from file\n");
-    EVP_PKEY_free(pkey);
-    EVP_PKEY_CTX_free(pkey_ctx);
-    return false;
+    goto end;
   }
 
   // Make sure digest from quote matches calculated PCR digest
   rc = tpm2_util_verify_digests(&ctx.attest.attested.quote.pcrDigest, &ctx.pcr_hash);
   if (!rc) {
     fprintf(stderr, "Error: calculated PCRs digest does not match PCRs digest in the quote\n");
-    return false;
+    goto end;
   }
 
+  return true;
+
+end:
   EVP_PKEY_free(pkey);
   EVP_PKEY_CTX_free(pkey_ctx);
-  return true;
+  return false;
 }
 
-bool tpm2_checkquote(TO_SEND TpaData, AK_FILE_TABLE *ak_table, int nodes_number, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
+bool tpm2_checkquote(TO_SEND TpaData, NONCE_BLOB nonce_blob, AK_FILE_TABLE *ak_table, int nodes_number, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
                     unsigned char *pcr9_sha256, unsigned char *pcr9_sha1) {
   TSS2_RC tss_r = TSS2_RC_SUCCESS;
   bool res;
   int i;
-
-  //ctx.pubkey_file_path = "/etc/tc/ak.pub.pem";
+  
   ctx.pubkey_file_path = get_ak_file_path(ak_table, TpaData, nodes_number);
-  fprintf(stdout, "ak path: %s\n", ctx.pubkey_file_path);
   ctx.halg = TPM2_ALG_SHA256;
 
-  ctx.extra_data.size = TpaData.nonce_blob.size;
-  memcpy(ctx.extra_data.buffer, TpaData.nonce_blob.buffer, ctx.extra_data.size);
+  ctx.extra_data.size = nonce_blob.size;
+  memcpy(ctx.extra_data.buffer, nonce_blob.buffer, ctx.extra_data.size);
 
   TPM2B_ATTEST *msg = malloc(sizeof(TPM2B_ATTEST));
   if(msg == NULL){
@@ -249,7 +241,6 @@ bool tpm2_checkquote(TO_SEND TpaData, AK_FILE_TABLE *ak_table, int nodes_number,
   
   tss_r = get_internal_attested_data(msg, &ctx.attest);
   if (tss_r != TSS2_RC_SUCCESS) {
-    free(msg);
     fprintf(stderr, "Error while Unmarshalling TPM2B_ATTEST to TPMS_ATTEST needed to get all attested info\n");
     return false;
   }
@@ -259,5 +250,6 @@ bool tpm2_checkquote(TO_SEND TpaData, AK_FILE_TABLE *ak_table, int nodes_number,
     fprintf(stderr, "Recomputation of quote signature failed!\n");
     return false;
   }
+  free(msg);
   return verify();
 }

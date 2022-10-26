@@ -11,70 +11,95 @@
 bool legal_int(const char *str);
 void hex_print(uint8_t *raw_data, size_t raw_size);
 bool openAKPub(const char *path, unsigned char **akPub);
-int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size);
-bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256, AK_FILE_TABLE *ak_table,
+int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
+bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
             TO_SEND TpaData, int nodes_number);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
-      IOTA_Index **read_indexes, IOTA_Index **read_indexes_AkPub, int nodes_number);
+      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response);
 
 int main(int argc, char const *argv[]) {
-  int i, j;
-  TO_SEND TpaData; VERIFICATION_RESPONSE ver_response; AK_FILE_TABLE *ak_table;
-  FILE *index_file;
+  int i, j, *attested_nodes;
+  TO_SEND *TpaData; VERIFICATION_RESPONSE ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
+  FILE *index_file, **ak_files;
   
-  IOTA_Index heartBeat_index, *read_indexes, *read_indexes_AkPub, write_response_index;
+  IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, write_response_index;
   uint8_t mykey[]="supersecretkeyforencryptionalby";
-	WAM_channel ch_read_hearbeat, ch_read_attest, ch_write_response, ch_read_ak;
+	WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
-  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, offset = 0;
-	uint8_t ret = 0, *read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
-  uint16_t previous_msg_num = 0;
+  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset;
+	uint8_t ret = 0, **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
+  uint16_t *previous_msg_num;
 
   unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL, *pcr10_sha256 = NULL, *pcr10_sha1 = NULL;
 
-  if(argc != 2){
-    fprintf(stdout, "Please specify the number of nodes\n");
+  if(argc != 3){
+    fprintf(stdout, "Please specify the file path and the number of nodes\n");
     return -1;
   }    
-  if(atoi(argv[1]) < 0 || !legal_int(argv[1])){
+  if(atoi(argv[2]) < 0 || !legal_int(argv[2])){
     fprintf(stdout, "Entered parameter is NaN or it has to be greater than 0\n");
     return -1;
   }
-  int nodes_number = atoi(argv[1]);
+  int nodes_number = atoi(argv[2]);
+
+  TpaData = malloc(nodes_number * sizeof(TO_SEND));
+  ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
+  ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
+  read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
+  read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
+  ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
+  ak_files = malloc(nodes_number * sizeof(FILE *));
+  offset = malloc(nodes_number * sizeof(uint32_t));
+  previous_msg_num = malloc(nodes_number * sizeof(uint16_t));
+
+  pcr9_sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
+  pcr10_sha1 = calloc((SHA_DIGEST_LENGTH + 1), sizeof(unsigned char));
+  pcr9_sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
+  pcr10_sha256 = calloc((SHA256_DIGEST_LENGTH + 1), sizeof(unsigned char));
 
   IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen("/etc/tc/RA_index_node2.json", "r");
+  index_file = fopen(argv[1], "r");
   if(index_file == NULL){
-    fprintf(stdout, "Cannot open file\n");
+    fprintf(stdout, "Cannot open index file\n");
     return -1;
   }
-  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, &read_indexes, &read_indexes_AkPub, nodes_number);
+  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, read_indexes, read_indexes_AkPub, nodes_number);
   fclose(index_file);
 
   // Set read index of heartbeat
   WAM_init_channel(&ch_read_hearbeat, 1, &privatenet, &k, &a);
 	set_channel_index_read(&ch_read_hearbeat, heartBeat_index.index);
-  // Set index for reading TpaData
-  WAM_init_channel(&ch_read_attest, 1, &privatenet, &k, &a);
-  set_channel_index_read(&ch_read_attest, read_indexes[0].index);
-  // Set index for reading Tpas AK
-  WAM_init_channel(&ch_read_ak, 1, &privatenet, &k, &a);
-  set_channel_index_read(&ch_read_ak, read_indexes_AkPub[0].index);
+  // Set indexes for reading TpaData
+  for(i = 0; i < nodes_number; i++){
+    //fprintf(stdout, "Setting index: "); hex_print(read_indexes[i].index, INDEX_SIZE);
+    WAM_init_channel(&ch_read_attest[i], i, &privatenet, &k, &a);
+    set_channel_index_read(&ch_read_attest[i], read_indexes[i].index);
+  }
+  // Set indexes for reading Tpas AK
+  for(i = 0; i < nodes_number; i++){
+    //fprintf(stdout, "Setting index: "); hex_print(read_indexes_AkPub[i].index, INDEX_SIZE);
+    WAM_init_channel(&ch_read_ak[i], i, &privatenet, &k, &a);
+    set_channel_index_read(&ch_read_ak[i], read_indexes_AkPub[i].index);
+  }
 
   // Set write index for response to heartbeat 
   WAM_init_channel(&ch_write_response, 1, &privatenet, &k, &a);
   set_channel_index_write(&ch_write_response, write_response_index);
 
   // First get all the AKs and construct table in order to recognize each TpaData received from the various Tpas
-  /* For now 1 node, 1 channel, 1 index! */ 
-  read_and_save_AKs(&ch_read_ak, &ak_table, nodes_number);
+  cleanUpFolder("/etc/tc/TPA_AKs");
+  srand((unsigned int)(time(NULL)));
+  for(i = 0; i < nodes_number; i++){
+    read_and_save_AKs(&ch_read_ak[i], ak_table, ak_files[i], i);
+  }
+  fprintf(stdout, "AK map constructed\n");
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
@@ -82,43 +107,46 @@ int main(int argc, char const *argv[]) {
       expected_size+=32;
       have_to_read = 1;
 
-      read_attest_message = malloc(sizeof(uint8_t) * (1024 * 100 * 2));
-      
-      ch_read_attest.recv_bytes = 0;
-      ch_read_attest.recv_msg = 0;
-      offset = 0;
-      previous_msg_num = 0;
+      attested_nodes = calloc(nodes_number, sizeof(int));
+      read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
+      for(i = 0; i < nodes_number; i++){
+        read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
+        ch_read_attest[i].recv_bytes = 0;
+        ch_read_attest[i].recv_msg = 0;
+        offset[i] = 0;
+        previous_msg_num[i] = 0;
+      }
+      nonce_blob.tag = (u_int8_t)0;
+      nonce_blob.size = sizeof nonce;
+      memcpy(nonce_blob.buffer, nonce, nonce_blob.size);
 
-      TpaData.nonce_blob.tag = (u_int8_t)0;
-      TpaData.nonce_blob.size = sizeof nonce;
-      memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
-
-      for (i = 0; i < TpaData.nonce_blob.size; i++)
-        printf("%02x", TpaData.nonce_blob.buffer[i]);
+      for (j = 0; j < nonce_blob.size; j++)
+        printf("%02x", nonce_blob.buffer[j]);
       printf("\n");
     }
-    if(have_to_read) {
-      if(!WAM_read(&ch_read_attest, expected_attest_message, &expected_size_attest_message)){            
-        if(ch_read_attest.recv_msg != previous_msg_num) {
-          memcpy(read_attest_message + offset, expected_attest_message, DATA_SIZE);
-          offset += DATA_SIZE;
-          previous_msg_num += 1;
+    i = 0;
+    while(have_to_read != 0){
+      if(!WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message)){            
+        if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
+          memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
+          offset[i] += DATA_SIZE;
+          previous_msg_num[i] += 1;
         }
-        else if(memcmp(last, read_attest_message + ch_read_attest.recv_bytes - sizeof last, sizeof last) == 0){
-          fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest.recv_bytes);
-          parseTPAdata(&TpaData, read_attest_message);
-          have_to_read = 0;
+        else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0 && (attested_nodes[i] == 0)){
+          fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest[i].recv_bytes);
+          parseTPAdata(&TpaData[i], read_attest_message[i]);
+          have_to_read += 1;
           
           // Get also pcr10 since we're reading pcrs here
           fprintf(stdout, "Calculating PCR9s ...\n");
-          if (!PCR9_calculation(&pcr9_sha1, &pcr9_sha256, ak_table, TpaData, nodes_number)) {
+          if (!PCR9_calculation(pcr9_sha1, pcr9_sha256, ak_table, TpaData[i], nodes_number)) {
             fprintf(stderr, "PCR9 calculation failed\n");
-            exit(-1);
+            goto end;
           }
 
           // PCR10 calculation + whitelist verify
           fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
-          verify_PCR10_whitelist(&pcr10_sha1, &pcr10_sha256, TpaData.ima_log_blob, &ver_response);
+          ver_response = verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob);
           fprintf(stdout, "DONE\n");
 
           fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
@@ -126,9 +154,9 @@ int main(int argc, char const *argv[]) {
           fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
           fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);
 
-          if (!tpm2_checkquote(TpaData, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
+          if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
             fprintf(stderr, "Error while verifying quote!\n");
-            exit(-1);
+            goto end;
           }
           fprintf(stdout, "Quote successfully verified!!!!\n");
           
@@ -136,20 +164,39 @@ int main(int argc, char const *argv[]) {
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response);
 
-          free(TpaData.sig_blob.buffer); free(TpaData.message_blob.buffer); free(TpaData.ak_digest_blob.buffer);
-          for(i = 0; i < TpaData.ima_log_blob.size; i++)
-            free(TpaData.ima_log_blob.logEntry[i].template_data);
-          free(TpaData.ima_log_blob.logEntry);
-          free(pcr10_sha1); free(pcr10_sha256); free(pcr9_sha1); free(pcr9_sha256);
-          for(i = 0; i < ver_response.number_white_entries; i++)
-            free(ver_response.untrusted_entries[i].untrusted_path_name);
-          free(ver_response.untrusted_entries);
-          free(read_attest_message);
+          attested_nodes[i] = 1;
+          fprintf(stdout, "Verified node %d\n", i);
+
+          /*free(TpaData[i].sig_blob.buffer); free(TpaData[i].message_blob.buffer); free(TpaData[i].ak_digest_blob.buffer);
+          for(j = 0; i < TpaData[i].ima_log_blob.size; j++)
+            free(TpaData[i].ima_log_blob.logEntry[j].template_data);
+          free(TpaData[i].ima_log_blob.logEntry);*/
+          /*for(j = 0; j < ver_response.number_white_entries; j++)
+            free(ver_response.untrusted_entries[j].untrusted_path_name);
+          free(ver_response.untrusted_entries);*/
+          //free(read_attest_message[i]);
         }
       }
+      if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
+        fprintf(stdout, "All quotes read!\n");
+        have_to_read = 0;
+        free(attested_nodes); // free array --> calloc when new nonce received (so automatically all 0s)
+      }
+      if((i + 1) == nodes_number) i = 0;
+      else i+=1;
     }
   }
   
+end:
+  for(i = 0; i < nodes_number; i++)
+    free(read_attest_message[i]);
+  free(read_attest_message);
+  free(pcr10_sha1); free(pcr10_sha256); free(pcr9_sha1); free(pcr9_sha256);
+  free(ch_read_attest); free(ch_read_ak); 
+  free(read_indexes); free(read_indexes_AkPub);
+  free(ak_table); free(ak_files);
+  free(offset); free(previous_msg_num);
+  free(TpaData);
   return 0;
 }
 
@@ -161,25 +208,23 @@ bool legal_int(const char *str) {
 }
 
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
-      IOTA_Index **read_indexes, IOTA_Index **read_indexes_AkPub, int nodes_number) {
-  int len_file;
-  char *data = NULL;
-
-  *read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
-  *read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
+      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, int nodes_number) {
+  int len_file, i = 0;
+  char *data = NULL, read_index_base_str[20] = "read_index_", akread_index_base_str[20] = "AkPub_read_";
+  char akpub_index_base_str[20]="pub_key_", index_AkPub_base_str[25]="AkPub_read_pubkey_";
 
   //get len of file
-  fseek(index_file, 0, SEEK_END);
+  fseek(index_file, 0L, SEEK_END);
   len_file = ftell(index_file);
-  fseek(index_file, 0, SEEK_SET);
+  fseek(index_file, 0L, SEEK_SET);
 
-   // read the data from the file 
-  data = (char*) malloc(len_file + 1);
+  // read the data from the file 
+  data = (char*) malloc((len_file + 1)*sizeof(char));
   fread(data, 1, len_file, index_file);
   data[len_file] = '\0';
 
   cJSON *json = cJSON_Parse(data);
-
+  
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "index")->valuestring, INDEX_HEX_SIZE, write_index->index, INDEX_SIZE);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index->keys.pub, ED_PUBLIC_KEY_BYTES);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index->keys.priv, ED_PRIVATE_KEY_BYTES);
@@ -187,12 +232,19 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "heartbeat")->valuestring, INDEX_HEX_SIZE, heartBeat_index->index, INDEX_SIZE);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "heartBeat_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, heartBeat_index->keys.pub, ED_PUBLIC_KEY_BYTES);
 
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "read_index_1")->valuestring, INDEX_HEX_SIZE, read_indexes[0]->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key_1")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes[0]->keys.pub, ED_PUBLIC_KEY_BYTES);
-
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_read_1")->valuestring, INDEX_HEX_SIZE, read_indexes_AkPub[0]->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_read_pubkey_1")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_AkPub[0]->keys.pub, ED_PUBLIC_KEY_BYTES);
-
+  for(i = 0; i < nodes_number; i++){
+    read_index_base_str[11] = (i + 1) + '0';
+    akpub_index_base_str[8] = (i + 1) + '0';
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, read_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akpub_index_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+  }
+  for(i = 0; i < nodes_number; i++){
+    akread_index_base_str[11] = (i + 1) + '0';
+    index_AkPub_base_str[18] = (i + 1) + '0';
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akread_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes_AkPub[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, index_AkPub_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_AkPub[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+  }
+  
   free(data);
 }
 
@@ -338,7 +390,7 @@ bool openAKPub(const char *path, unsigned char **akPub) {
   return true;
 }
 
-int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char **digest, int size) {
+int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
@@ -355,17 +407,17 @@ int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, 
   mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, md, NULL);
   EVP_DigestUpdate(mdctx, pcr_concatenated, size);
-  EVP_DigestFinal_ex(mdctx, *digest, &md_len);
+  EVP_DigestFinal_ex(mdctx, digest, &md_len);
   EVP_MD_CTX_free(mdctx);
 
   return md_len;
 }
 
-bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expected_PCR9sha256, AK_FILE_TABLE *ak_table,
+bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
             TO_SEND TpaData, int nodes_number) {
   int i;
   unsigned char *akPub = NULL, *digest_sha1 = NULL, *digest_sha256 = NULL;
-  u_int8_t *ak_path;
+  u_int8_t *ak_path = NULL, *pcr_sha1 = NULL, *pcr_sha256 = NULL;
   
   ak_path = get_ak_file_path(ak_table, TpaData, nodes_number);
   if(ak_path == NULL){
@@ -378,42 +430,37 @@ bool PCR9_calculation(unsigned char **expected_PCR9sha1, unsigned char **expecte
   }
   digest_sha1 = malloc((EVP_MAX_MD_SIZE) * sizeof(unsigned char));
   digest_sha256 = malloc((EVP_MAX_MD_SIZE) * sizeof(unsigned char));
-  int md_len_sha1 = computeDigestEVP(akPub, "sha1", &digest_sha1);
+  int md_len_sha1 = computeDigestEVP(akPub, "sha1", digest_sha1);
   if (md_len_sha1 <= 0)
     return false;
-  int md_len_sha256 = computeDigestEVP(akPub, "sha256", &digest_sha256);
+  int md_len_sha256 = computeDigestEVP(akPub, "sha256", digest_sha256);
   if (md_len_sha256 <= 0)
     return false;
 
-  u_int8_t *pcr_sha1;
   pcr_sha1 = calloc((SHA_DIGEST_LENGTH * 2 + 1), sizeof(u_int8_t));
   int k = SHA_DIGEST_LENGTH;
   for (i = 0; i < md_len_sha1; i++)
     pcr_sha1[k++] = (u_int8_t)digest_sha1[i];
   pcr_sha1[SHA_DIGEST_LENGTH * 2] = '\0';
-  *expected_PCR9sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
   md_len_sha1 = computePCRsoftBinding(pcr_sha1, "sha1", expected_PCR9sha1, SHA_DIGEST_LENGTH * 2);
   if (md_len_sha1 <= 0)
     return false;
 
-  free(pcr_sha1);
-  free(digest_sha1);
-
-  u_int8_t *pcr_sha256;
   pcr_sha256 = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
   k = SHA256_DIGEST_LENGTH;
   for (i = 0; i < md_len_sha256; i++) 
     pcr_sha256[k++] = digest_sha256[i];
   pcr_sha256[SHA256_DIGEST_LENGTH * 2] = '\0';
-  *expected_PCR9sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
   md_len_sha256 = computePCRsoftBinding(pcr_sha256, "sha256", expected_PCR9sha256, SHA256_DIGEST_LENGTH * 2);
   if (md_len_sha256 <= 0)
     return false;
 
+  free(pcr_sha1);
+  free(digest_sha1);
   free(pcr_sha256);
   free(digest_sha256);
-
   free(akPub);
+  // do not free ak_path because it points to the actual path, otherwise it will free the actual data and the so it will be lost
   return true;
 }
 

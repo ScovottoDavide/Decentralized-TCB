@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
+#include <openssl/rand.h>
+#include <dirent.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
 #include "/home/pi/WAM/WAM.h"
@@ -16,6 +18,7 @@ typedef struct {
     u_int8_t *path_name;
 } AK_FILE_TABLE;
 
-void rand_str(char *dest, size_t length);
-int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
-bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE **ak_table, int nodes_number);
+void cleanUpFolder(char *path);
+char* rand_str(size_t length);
+int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest);
+bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number);

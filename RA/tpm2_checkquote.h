@@ -64,7 +64,6 @@ typedef struct {
 } AK_DIGEST_BLOB;
 
 typedef struct {
-  NONCE_BLOB nonce_blob;
   SIG_BLOB sig_blob;
   MESSAGE_BLOB message_blob;
   IMA_LOG_BLOB ima_log_blob;
@@ -122,5 +121,5 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey);
 bool tpm2_util_verify_digests(TPM2B_DIGEST *quoteDigest, TPM2B_DIGEST *pcr_digest);
 bool verify(void);
 
-bool tpm2_checkquote(TO_SEND TpaData, AK_FILE_TABLE *ak_table, int nodes_number, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
+bool tpm2_checkquote(TO_SEND TpaData, NONCE_BLOB nonce_blob, AK_FILE_TABLE *ak_table, int nodes_number, unsigned char *pcr10_sha256, unsigned char *pcr10_sha1,
                     unsigned char *pcr9_sha256, unsigned char *pcr9_sha1);
