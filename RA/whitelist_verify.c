@@ -88,6 +88,11 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
   for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
     pcr_concatenated_sha1[i] = (u_int8_t)pcr10_sha1[i];
   }
+  pcr_concatenated[SHA256_DIGEST_LENGTH * 2] = '\0';
+  pcr_concatenated_sha1[SHA_DIGEST_LENGTH * 2] = '\0';
+  currentTemplateMD[SHA256_DIGEST_LENGTH] = '\0';
+  currentTemplateMD_sha1[SHA_DIGEST_LENGTH] = '\0';
+  currentEntryFileHash[SHA256_DIGEST_LENGTH] = '\0';
 
   is_ima_template = strcmp(template.name, "ima") == 0 ? 1 : 0;
   is_imang_template = strcmp(template.name, "ima-ng") == 0 ? 1 : 0;
@@ -104,6 +109,7 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
   }
 
   entry_aggregate = calloc(template.template_data_len + 1, sizeof(u_int8_t));
+  entry_aggregate[template.template_data_len] = '\0';
 
   if (is_imang_template)
   { /* finish 'ima-ng' template data read */
@@ -145,7 +151,8 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
     memcpy(entry_aggregate + acc, &field_path_len, sizeof field_path_len);
     acc += sizeof field_path_len;
 
-    path_field = malloc(field_path_len * sizeof(u_int8_t));
+    path_field = malloc(field_path_len + 1 * sizeof(u_int8_t));
+    path_field[field_path_len] = '\0';
 
     memcpy(path_field, template.template_data + acc, sizeof(u_int8_t) * field_path_len); /* [file hash] */
     memcpy(entry_aggregate + acc, path_field, field_path_len);
@@ -208,11 +215,13 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
         }*/
       }
     }
-    free(path_field);
+    //free(path_field);
   }
-  free(currentTemplateMD); free(currentTemplateMD_sha1);
-  free(pcr_concatenated); free(pcr_concatenated_sha1);
-  free(entry_aggregate);
+  /*free(currentTemplateMD); 
+  free(currentTemplateMD_sha1);
+  free(pcr_concatenated); 
+  free(pcr_concatenated_sha1);
+  free(entry_aggregate);*/
   return 0;
 }
 

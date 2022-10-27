@@ -191,6 +191,8 @@ bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub) {
   fprintf(stdout, "Writing AkPub...\n");
   WAM_write(ch_send_AkPub, akPub, (uint32_t)strlen(akPub), false);
 
+  free(digest); free(akPub);
+
   return true;
 }
 

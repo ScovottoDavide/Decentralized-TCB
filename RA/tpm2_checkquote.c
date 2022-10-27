@@ -66,13 +66,10 @@ bool calculate_pcr_digest(unsigned char *pcr10_sha256, unsigned char *pcr10_sha1
   return true;
 }
 
-TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest)
-{
-
+TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest) {
   size_t offset = 0;
   TSS2_RC res = Tss2_MU_TPMS_ATTEST_Unmarshal(quoted->attestationData, quoted->size, &offset, attest);
-  if (res != TSS2_RC_SUCCESS)
-  {
+  if (res != TSS2_RC_SUCCESS) {
     fprintf(stderr, "Cannot get digest from quote\n");
     return TSS2_ESYS_RC_BAD_VALUE;
   }
@@ -250,6 +247,6 @@ bool tpm2_checkquote(TO_SEND TpaData, NONCE_BLOB nonce_blob, AK_FILE_TABLE *ak_t
     fprintf(stderr, "Recomputation of quote signature failed!\n");
     return false;
   }
-  free(msg);
+  //free(msg);
   return verify();
 }
