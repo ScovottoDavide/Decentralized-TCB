@@ -8,43 +8,24 @@ struct tpm_pcr_extend_ctx {
 };
 
 bool openAKPub(const char *path, unsigned char **akPub) {
-
+  int len_file = 0;
+  char *data;
   FILE *ak_pub = fopen(path, "r");
   if(ak_pub == NULL){
     fprintf(stderr, "Could not open file %s \n", path);
     return false;
   }
 
-  char line[4096];
-  char buff[4096] = {'\0'};
-  char h1[128], h2[128], h3[128];
-  // remove the header of the AK public key
-  fscanf(ak_pub, "%s %s %s", h1, h2, h3);
-  strcat(h1, " ");
-  strcat(h2, " ");
-  strcat(h3, "\n");
-  strcat(h2, h3);
-  strcat(h1, h2);
-  strcat(buff, h1);
+  //get len of file
+  fseek(ak_pub, 0L, SEEK_END);
+  len_file = ftell(ak_pub);
+  fseek(ak_pub, 0L, SEEK_SET);
+  // read the data from the file 
+  data = (char*) malloc((len_file + 1)*sizeof(char));
+  fread(data, 1, len_file, ak_pub);
+  data[len_file] = '\0';
 
-  while(fscanf(ak_pub, "%s \n", line) == 1){
-    if(line[0] == '-') break; // To avoid the footer of the AK public key
-    strcat(line, "\n");
-    strcat(buff, line);
-  }
-
-  strcat(line, " ");
-  fscanf(ak_pub, "%s %s", h1, h2);
-  strcat(h1, " ");
-  strcat(h2, "\n");
-  strcat(h1, h2);
-  strcat(line, h1);
-  strcat(buff, line);
-
-  *akPub = (char *) malloc(strlen(buff)*sizeof(char));
-  strncpy(*akPub, buff, strlen(buff));
-
-  //printf("%s\n", *akPub);
+  *akPub = data;
   fclose (ak_pub);
   return true;
 }
@@ -159,11 +140,13 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
     memcpy(digests.digests->digest.sha256, digest_bytes, size);
   }
 
-
   TSS2_RC tss_r = Esys_PCR_Extend(ectx, pcr_index, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, &digests);
   if(tss_r != TSS2_RC_SUCCESS){
     fprintf(stderr, "Could not extend PCR:%d\n", pcr_index);
     exit(-1);
   }
+
+  free(digest);
+  free(digest_bytes);
   return tss_r;
 }

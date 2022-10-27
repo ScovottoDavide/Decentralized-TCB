@@ -17,7 +17,7 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
       IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
-void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response);
+void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
 
 int main(int argc, char const *argv[]) {
   int i, j, *verified_nodes;
@@ -47,6 +47,7 @@ int main(int argc, char const *argv[]) {
   int nodes_number = atoi(argv[2]);
 
   TpaData = malloc(nodes_number * sizeof(TO_SEND));
+  ver_response = malloc(nodes_number * sizeof(VERIFICATION_RESPONSE));
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
   read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
@@ -148,7 +149,10 @@ int main(int argc, char const *argv[]) {
 
             // PCR10 calculation + whitelist verify
             fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
-            ver_response = verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob);
+            if(!verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob, ver_response[i])){
+              fprintf(stdout, "Error while calculating pcr10s or verifying whitelist\n");
+              goto end;
+            }
 
             fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
             fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
@@ -160,10 +164,6 @@ int main(int argc, char const *argv[]) {
               goto end;
             }
             fprintf(stdout, "Quote successfully verified!!!!\n");
-            
-            // write "response" to heartbeat
-            fprintf(stdout, "\n\tSending verification response\n");
-            sendRAresponse(&ch_write_response, *ver_response);
 
             verified_nodes[i] = 1;
 
@@ -188,6 +188,9 @@ int main(int argc, char const *argv[]) {
         }
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           fprintf(stdout, "All quotes read!\n");
+          // write "response" to heartbeat
+          fprintf(stdout, "\n\tSending verification response\n");
+          sendRAresponse(&ch_write_response, ver_response, nodes_number);
           have_to_read = 0;
           free(read_attest_message);
           for(j = 0; j < nodes_number; j++)
@@ -321,15 +324,17 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_numbe
   TpaData[node_number].ak_digest_blob.buffer[TpaData[node_number].ak_digest_blob.size] = '\0';
 }
 
-void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
+void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number){
   size_t acc = 0, bytes_to_send = 0;
-  int i;
+  int i, j;
   uint8_t last[4] = "done", *response_buff = NULL;
   
-  bytes_to_send += sizeof(uint8_t) + sizeof(uint16_t); // tag + number of untrsuted entries
-  for(i = 0; i < ver_response.number_white_entries; i++){
-    bytes_to_send += sizeof(uint16_t);
-    bytes_to_send += ver_response.untrusted_entries[i].name_len * sizeof(char);
+  for(i = 0; i < nodes_number; i++){
+    bytes_to_send += sizeof(uint8_t) + sizeof(uint16_t); // tag + number of untrsuted entries
+    for(j = 0; j < ver_response[i].number_white_entries; j++){
+      bytes_to_send += sizeof(uint16_t);
+      bytes_to_send += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
+    }
   }
   bytes_to_send += sizeof last;
 
@@ -339,15 +344,17 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
     return;
   }
 
-  memcpy(response_buff + acc, &ver_response.tag, sizeof(uint8_t));
-  acc += sizeof(uint8_t);
-  memcpy(response_buff + acc, &ver_response.number_white_entries, sizeof(uint16_t));
-  acc += sizeof(uint16_t);
-  for(i = 0; i < ver_response.number_white_entries; i++){
-    memcpy(response_buff + acc, &ver_response.untrusted_entries[i].name_len, sizeof(uint16_t));
+  for(i = 0; i < nodes_number; i++){
+    memcpy(response_buff + acc, &ver_response[i].tag, sizeof(uint8_t));
+    acc += sizeof(uint8_t);
+    memcpy(response_buff + acc, &ver_response[i].number_white_entries, sizeof(uint16_t));
     acc += sizeof(uint16_t);
-    memcpy(response_buff + acc, ver_response.untrusted_entries[i].untrusted_path_name, ver_response.untrusted_entries[i].name_len * sizeof(char));
-    acc += ver_response.untrusted_entries[i].name_len * sizeof(char);
+    for(j = 0; j < ver_response[i].number_white_entries; j++){
+      memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].name_len, sizeof(uint16_t));
+      acc += sizeof(uint16_t);
+      memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].untrusted_path_name, ver_response[i].untrusted_entries[j].name_len * sizeof(char));
+      acc += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
+    }
   }
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
@@ -362,42 +369,25 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){
 }
 
 bool openAKPub(const char *path, unsigned char **akPub) {
+  int len_file = 0;
+  char *data;
   FILE *ak_pub = fopen(path, "r");
-  if (ak_pub == NULL) {
+  if(ak_pub == NULL){
     fprintf(stderr, "Could not open file %s \n", path);
     return false;
   }
 
-  char line[2048], buff[2048];
-  char h1[128], h2[128], h3[128];
-  // remove the header of the AK public key
-  fscanf(ak_pub, "%s %s %s", h1, h2, h3);
-  strcat(h1, " ");
-  strcat(h2, " ");
-  strcat(h3, "\n");
-  strcat(h2, h3);
-  strcat(h1, h2);
-  strcat(buff, h1);
+  //get len of file
+  fseek(ak_pub, 0L, SEEK_END);
+  len_file = ftell(ak_pub);
+  fseek(ak_pub, 0L, SEEK_SET);
+  // read the data from the file 
+  data = (char*) malloc((len_file + 1)*sizeof(char));
+  fread(data, 1, len_file, ak_pub);
+  data[len_file] = '\0';
 
-  while (fscanf(ak_pub, "%s \n", line) == 1)
-  {
-    if (line[0] == '-')
-      break; // To avoid the footer of the AK public key
-    strcat(line, "\n");
-    strcat(buff, line);
-  }
-
-  strcat(line, " ");
-  fscanf(ak_pub, "%s %s", h1, h2);
-  strcat(h1, " ");
-  strcat(h2, "\n");
-  strcat(h1, h2);
-  strcat(line, h1);
-  strcat(buff, line);
-
-  *akPub = buff;
-
-  fclose(ak_pub);
+  *akPub = data;
+  fclose (ak_pub);
   return true;
 }
 

@@ -124,11 +124,11 @@ bool tpm2_public_load_pkey(const char *path, EVP_PKEY **pkey) {
   p = PEM_read_bio_PUBKEY(bio, &p, NULL, NULL);
   if (!p) {
     fprintf(stderr, "Failed to convert public key from file '%s'\n", path);
-    BIO_free(bio);
+    //BIO_free(bio);
     return false;
   }
   *pkey = p;
-  BIO_free(bio);
+  //BIO_free(bio);
   return true;
 }
 
@@ -202,8 +202,8 @@ bool verify(void) {
   return true;
 
 end:
-  EVP_PKEY_free(pkey);
-  EVP_PKEY_CTX_free(pkey_ctx);
+  //EVP_PKEY_free(pkey);
+  //EVP_PKEY_CTX_free(pkey_ctx);
   return false;
 }
 
