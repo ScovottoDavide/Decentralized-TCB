@@ -218,8 +218,8 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
 
 
 
-VERIFICATION_RESPONSE verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha256, IMA_LOG_BLOB ima_log_blob) {
-  VERIFICATION_RESPONSE ver_response;
+VERIFICATION_RESPONSE* verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha256, IMA_LOG_BLOB ima_log_blob) {
+  VERIFICATION_RESPONSE *ver_response;
   struct event template;
   struct whitelist_entry *white_entries = NULL;
   FILE *whitelist_fp;
@@ -236,12 +236,14 @@ VERIFICATION_RESPONSE verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned
       exit(-1);
     }
     loadWhitelist(whitelist_fp, white_entries, num_entries);
+    fclose(whitelist_fp);
   }
 
-  ver_response.tag = 5;
-  ver_response.number_white_entries = 0;
+  ver_response = malloc(sizeof(VERIFICATION_RESPONSE));
+  ver_response->tag = 5;
+  ver_response->number_white_entries = 0;
   // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
-  ver_response.untrusted_entries = malloc(num_entries * sizeof(UNTRUSTED_PATH));
+  ver_response->untrusted_entries = malloc(num_entries * sizeof(UNTRUSTED_PATH));
 
   for (i = 0; i < ima_log_blob.size; i++) {
     if (ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX) {
@@ -250,15 +252,13 @@ VERIFICATION_RESPONSE verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned
       fclose(whitelist_fp);
       exit(-1);
     }
-    if (read_template_data(ima_log_blob.logEntry[i], white_entries, num_entries, pcr10_sha256, pcr10_sha1, &ver_response) == -1) {
+    if (read_template_data(ima_log_blob.logEntry[i], white_entries, num_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {
       printf("\nReading of measurement entry failed\n");
       exit(-1);
     }
   }
-
-  if (whitelist_fp != NULL)
-    fclose(whitelist_fp);
-  free(white_entries);
+    
+  //free(white_entries);
   
   return ver_response;
 }

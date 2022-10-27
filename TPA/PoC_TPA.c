@@ -178,7 +178,7 @@ bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub) {
   }
 
   digest = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
-  int md_len = computeDigestEVP(akPub, "sha256", &digest);
+  int md_len = computeDigestEVP(akPub, "sha256", digest);
   if(md_len <= 0)
     return false;
   

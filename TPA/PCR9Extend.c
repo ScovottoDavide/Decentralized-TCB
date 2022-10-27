@@ -49,7 +49,7 @@ bool openAKPub(const char *path, unsigned char **akPub) {
   return true;
 }
 
-int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **digest){
+int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest){
   EVP_MD_CTX*mdctx;
   const EVP_MD *md;
   unsigned int md_len, i;
@@ -66,7 +66,7 @@ int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **
   mdctx = EVP_MD_CTX_new();
   EVP_DigestInit_ex(mdctx, md, NULL);
   EVP_DigestUpdate(mdctx, akPub, strlen(akPub));
-  EVP_DigestFinal_ex(mdctx, *digest, &md_len);
+  EVP_DigestFinal_ex(mdctx, digest, &md_len);
   EVP_MD_CTX_free(mdctx);
 
   return md_len;
@@ -108,7 +108,7 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
 
   digest = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
 
-  int md_len = computeDigestEVP(akPub, halg, &digest);
+  int md_len = computeDigestEVP(akPub, halg, digest);
   if(md_len <= 0)
     return TSS2_ESYS_RC_BAD_VALUE;
 

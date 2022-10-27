@@ -16,12 +16,12 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
             TO_SEND TpaData, int nodes_number);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
       IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, int nodes_number);
-void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message);
+void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response);
 
 int main(int argc, char const *argv[]) {
-  int i, j, *attested_nodes;
-  TO_SEND *TpaData; VERIFICATION_RESPONSE ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
+  int i, j, *verified_nodes;
+  TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   FILE *index_file, **ak_files;
   
   IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, write_response_index;
@@ -107,7 +107,7 @@ int main(int argc, char const *argv[]) {
       expected_size+=32;
       have_to_read = 1;
 
-      attested_nodes = calloc(nodes_number, sizeof(int));
+      verified_nodes = calloc(nodes_number, sizeof(int));
       read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
       for(i = 0; i < nodes_number; i++){
         read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
@@ -132,55 +132,63 @@ int main(int argc, char const *argv[]) {
           offset[i] += DATA_SIZE;
           previous_msg_num[i] += 1;
         }
-        else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0 && (attested_nodes[i] == 0)){
-          fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest[i].recv_bytes);
-          parseTPAdata(&TpaData[i], read_attest_message[i]);
-          have_to_read += 1;
-          
-          // Get also pcr10 since we're reading pcrs here
-          fprintf(stdout, "Calculating PCR9s ...\n");
-          if (!PCR9_calculation(pcr9_sha1, pcr9_sha256, ak_table, TpaData[i], nodes_number)) {
-            fprintf(stderr, "PCR9 calculation failed\n");
-            goto end;
+        else if((verified_nodes[i] == 0)){
+          if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
+            fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest[i].recv_bytes);
+            parseTPAdata(TpaData, read_attest_message[i], i);
+            free(read_attest_message[i]);
+            have_to_read += 1;
+            
+            // Get also pcr10 since we're reading pcrs here
+            fprintf(stdout, "Calculating PCR9s ...\n");
+            if (!PCR9_calculation(pcr9_sha1, pcr9_sha256, ak_table, TpaData[i], nodes_number)) {
+              fprintf(stderr, "PCR9 calculation failed\n");
+              goto end;
+            }
+
+            // PCR10 calculation + whitelist verify
+            fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
+            ver_response = verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob);
+            fprintf(stdout, "DONE\n");
+
+            fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
+            fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
+            fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
+            fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);
+
+            if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
+              fprintf(stderr, "Error while verifying quote!\n");
+              goto end;
+            }
+            fprintf(stdout, "Quote successfully verified!!!!\n");
+            
+            // write "response" to heartbeat
+            fprintf(stdout, "\n\tSending verification response\n");
+            sendRAresponse(&ch_write_response, *ver_response);
+
+            verified_nodes[i] = 1;
+            fprintf(stdout, "Verified node %d\n", i);
+
+            for(j = 0; j < SHA_DIGEST_LENGTH; j++)
+              pcr10_sha1[j] = 0; 
+            for(j = 0; j < SHA256_DIGEST_LENGTH; j++)
+              pcr10_sha256[j] = 0;
+              
+            /*free(TpaData[i].sig_blob.buffer); free(TpaData[i].message_blob.buffer); free(TpaData[i].ak_digest_blob.buffer);
+            for(j = 0; i < TpaData[i].ima_log_blob.size; j++)
+              free(TpaData[i].ima_log_blob.logEntry[j].template_data);
+            free(TpaData[i].ima_log_blob.logEntry);*/
+            /*for(j = 0; j < ver_response.number_white_entries; j++)
+              free(ver_response.untrusted_entries[j].untrusted_path_name);
+            free(ver_response.untrusted_entries);*/
           }
-
-          // PCR10 calculation + whitelist verify
-          fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
-          ver_response = verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob);
-          fprintf(stdout, "DONE\n");
-
-          fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
-          fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
-          fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
-          fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);
-
-          if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
-            fprintf(stderr, "Error while verifying quote!\n");
-            goto end;
-          }
-          fprintf(stdout, "Quote successfully verified!!!!\n");
-          
-          // write "response" to heartbeat
-          fprintf(stdout, "\n\tSending verification response\n");
-          sendRAresponse(&ch_write_response, ver_response);
-
-          attested_nodes[i] = 1;
-          fprintf(stdout, "Verified node %d\n", i);
-
-          /*free(TpaData[i].sig_blob.buffer); free(TpaData[i].message_blob.buffer); free(TpaData[i].ak_digest_blob.buffer);
-          for(j = 0; i < TpaData[i].ima_log_blob.size; j++)
-            free(TpaData[i].ima_log_blob.logEntry[j].template_data);
-          free(TpaData[i].ima_log_blob.logEntry);*/
-          /*for(j = 0; j < ver_response.number_white_entries; j++)
-            free(ver_response.untrusted_entries[j].untrusted_path_name);
-          free(ver_response.untrusted_entries);*/
-          //free(read_attest_message[i]);
         }
       }
       if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
         fprintf(stdout, "All quotes read!\n");
         have_to_read = 0;
-        free(attested_nodes); // free array --> calloc when new nonce received (so automatically all 0s)
+        free(read_attest_message);
+        free(verified_nodes); // free array --> calloc when new nonce received (so automatically all 0s)
       }
       if((i + 1) == nodes_number) i = 0;
       else i+=1;
@@ -248,60 +256,60 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   free(data);
 }
 
-void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message) {
+void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number) {
   int acc = 0, i;
 
   // SIG
-  memcpy(&TpaData->sig_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
+  memcpy(&TpaData[node_number].sig_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  memcpy(&TpaData->sig_blob.size, read_attest_message + acc, sizeof(u_int16_t));
+  memcpy(&TpaData[node_number].sig_blob.size, read_attest_message + acc, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
-  TpaData->sig_blob.buffer = malloc(TpaData->sig_blob.size * sizeof(u_int8_t));
-  memcpy(TpaData->sig_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData->sig_blob.size);
-  acc += sizeof(u_int8_t) * TpaData->sig_blob.size;
+  TpaData[node_number].sig_blob.buffer = malloc(TpaData[node_number].sig_blob.size * sizeof(u_int8_t));
+  memcpy(TpaData[node_number].sig_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData[node_number].sig_blob.size);
+  acc += sizeof(u_int8_t) * TpaData[node_number].sig_blob.size;
   
   // MESSAGE
-  memcpy(&TpaData->message_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
+  memcpy(&TpaData[node_number].message_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  memcpy(&TpaData->message_blob.size, read_attest_message + acc, sizeof(u_int16_t));
+  memcpy(&TpaData[node_number].message_blob.size, read_attest_message + acc, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
-  TpaData->message_blob.buffer = malloc(TpaData->message_blob.size * sizeof(u_int8_t));
-  memcpy(TpaData->message_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData->message_blob.size);
-  acc += sizeof(u_int8_t) * TpaData->message_blob.size;
+  TpaData[node_number].message_blob.buffer = malloc(TpaData[node_number].message_blob.size * sizeof(u_int8_t));
+  memcpy(TpaData[node_number].message_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData[node_number].message_blob.size);
+  acc += sizeof(u_int8_t) * TpaData[node_number].message_blob.size;
 
   // IMA
-  memcpy(&TpaData->ima_log_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
+  memcpy(&TpaData[node_number].ima_log_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  memcpy(&TpaData->ima_log_blob.size, read_attest_message + acc, sizeof(u_int16_t));
+  memcpy(&TpaData[node_number].ima_log_blob.size, read_attest_message + acc, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
-  memcpy(&TpaData->ima_log_blob.wholeLog, read_attest_message + acc, sizeof(u_int8_t));
+  memcpy(&TpaData[node_number].ima_log_blob.wholeLog, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
   
-  TpaData->ima_log_blob.logEntry = calloc(TpaData->ima_log_blob.size, sizeof(struct event));
+  TpaData[node_number].ima_log_blob.logEntry = calloc(TpaData[node_number].ima_log_blob.size, sizeof(struct event));
 
-  for (i = 0; i < TpaData->ima_log_blob.size; i++) {
+  for (i = 0; i < TpaData[node_number].ima_log_blob.size; i++) {
     // send header
-    memcpy(&TpaData->ima_log_blob.logEntry[i].header, read_attest_message + acc, sizeof TpaData->ima_log_blob.logEntry[i].header);
-    acc += sizeof TpaData->ima_log_blob.logEntry[i].header;
+    memcpy(&TpaData[node_number].ima_log_blob.logEntry[i].header, read_attest_message + acc, sizeof TpaData[node_number].ima_log_blob.logEntry[i].header);
+    acc += sizeof TpaData[node_number].ima_log_blob.logEntry[i].header;
     // send name
-    memcpy(TpaData->ima_log_blob.logEntry[i].name, read_attest_message + acc, TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char));
-    acc += TpaData->ima_log_blob.logEntry[i].header.name_len * sizeof(char);
+    memcpy(TpaData[node_number].ima_log_blob.logEntry[i].name, read_attest_message + acc, TpaData[node_number].ima_log_blob.logEntry[i].header.name_len * sizeof(char));
+    acc += TpaData[node_number].ima_log_blob.logEntry[i].header.name_len * sizeof(char);
     // send template data len
-    memcpy(&TpaData->ima_log_blob.logEntry[i].template_data_len, read_attest_message + acc, sizeof(u_int32_t));
+    memcpy(&TpaData[node_number].ima_log_blob.logEntry[i].template_data_len, read_attest_message + acc, sizeof(u_int32_t));
     acc += sizeof(u_int32_t);
     // send template data
-    TpaData->ima_log_blob.logEntry[i].template_data = malloc(TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
-    memcpy(TpaData->ima_log_blob.logEntry[i].template_data, read_attest_message + acc, TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
-    acc += TpaData->ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
+    TpaData[node_number].ima_log_blob.logEntry[i].template_data = malloc(TpaData[node_number].ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
+    memcpy(TpaData[node_number].ima_log_blob.logEntry[i].template_data, read_attest_message + acc, TpaData[node_number].ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
+    acc += TpaData[node_number].ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
   }
   // AK MD
-  memcpy(&TpaData->ak_digest_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
+  memcpy(&TpaData[node_number].ak_digest_blob.tag, read_attest_message + acc, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  memcpy(&TpaData->ak_digest_blob.size, read_attest_message + acc, sizeof(u_int16_t));
+  memcpy(&TpaData[node_number].ak_digest_blob.size, read_attest_message + acc, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
-  TpaData->ak_digest_blob.buffer = malloc(TpaData->ak_digest_blob.size * sizeof(u_int8_t));
-  memcpy(TpaData->ak_digest_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData->ak_digest_blob.size);
-  //TpaData->ak_digest_blob.buffer[TpaData->ak_digest_blob.size] = '\0';
+  TpaData[node_number].ak_digest_blob.buffer = malloc(TpaData[node_number].ak_digest_blob.size * sizeof(u_int8_t));
+  memcpy(TpaData[node_number].ak_digest_blob.buffer, read_attest_message + acc, sizeof(u_int8_t) * TpaData[node_number].ak_digest_blob.size);
+  //TpaData[node_number].ak_digest_blob.buffer[TpaData[node_number].ak_digest_blob.size] = '\0';
 }
 
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE ver_response){

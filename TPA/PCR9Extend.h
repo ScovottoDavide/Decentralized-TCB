@@ -17,7 +17,7 @@ bool openAKPub(const char *path, unsigned char **akPub);
 // Using OpenSSL direct APIs for computing the Digest --> NOT RECOMMENDED!!
 bool computeDigest(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
 // Using OpenSSL higher APIs for computing the Digest
-int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char **digest);
+int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest);
 
 int tpm2_util_hex_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer);
 TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg);
