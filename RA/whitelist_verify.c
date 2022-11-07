@@ -70,7 +70,7 @@ int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, co
 
 int read_template_data(struct event template, const struct whitelist_entry *white_entries, 
     int white_entries_size, unsigned char pcr10_sha256[SHA256_DIGEST_LENGTH + 1], unsigned char pcr10_sha1[SHA_DIGEST_LENGTH + 1], 
-    VERIFICATION_RESPONSE *ver_response)
+    VERIFICATION_RESPONSE ver_response)
 {
   int len, is_ima_template, is_imang_template, i, k = 0, j;
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
@@ -202,13 +202,14 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
         if (strcmp(white_entries[entry_index].digest, string_digest)) {
           //fprintf(stdout, "State Untrusted: ");
           //fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
-          if(ver_response->number_white_entries + 1 > white_entries_size) {
+          if(ver_response.number_white_entries + 1 > white_entries_size) {
             //fprintf(stdout, "Expected untrusted entries limit exceeded\n");
           } else {
-            ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)field_path_len;
-            ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name = malloc(ver_response->untrusted_entries[ver_response->number_white_entries].name_len * sizeof(char));
-            strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, field_path_len);
-            ver_response->number_white_entries += 1;
+            ver_response.untrusted_entries[ver_response.number_white_entries].name_len = (uint16_t)field_path_len;
+            ver_response.untrusted_entries[ver_response.number_white_entries].untrusted_path_name = malloc(ver_response.untrusted_entries[ver_response.number_white_entries].name_len + 1 * sizeof(char));
+            strncpy(ver_response.untrusted_entries[ver_response.number_white_entries].untrusted_path_name, white_entries[entry_index].path, field_path_len);
+            ver_response.untrusted_entries[ver_response.number_white_entries].untrusted_path_name[field_path_len] = '\0';
+            ver_response.number_white_entries += 1;
           }
         }/*else {
           fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
@@ -253,11 +254,10 @@ bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha2
   for (i = 0; i < ima_log_blob.size; i++) {
     if (ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX) {
       fprintf(stdout, "%d ERROR: event name too long!\n", template.header.name_len);
-      free(white_entries);
-      fclose(whitelist_fp);
+      //free(white_entries);
       return false;
     }
-    if (read_template_data(ima_log_blob.logEntry[i], white_entries, num_entries, pcr10_sha256, pcr10_sha1, &ver_response) == -1) {
+    if (read_template_data(ima_log_blob.logEntry[i], white_entries, num_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {
       printf("\nReading of measurement entry failed\n");
       return false;
     }

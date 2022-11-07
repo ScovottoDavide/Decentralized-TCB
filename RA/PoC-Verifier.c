@@ -137,7 +137,7 @@ int main(int argc, char const *argv[]) {
           else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
             fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest[i].recv_bytes);
             parseTPAdata(TpaData, read_attest_message[i], i);
-            free(read_attest_message[i]);
+            //free(read_attest_message[i]);
             have_to_read += 1;
             
             // Get also pcr10 since we're reading pcrs here
@@ -154,10 +154,15 @@ int main(int argc, char const *argv[]) {
               goto end;
             }
 
-            fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
+            fprintf(stdout, "Verification response built: \n");
+            fprintf(stdout, "tag = %d, number of entries = %d\n", ver_response[i].tag, ver_response[i].number_white_entries);
+            for(j = 0; j < ver_response[i].number_white_entries; j++)
+              fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
+
+            /*fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
             fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
             fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
-            fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);
+            fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);*/
 
             if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
               fprintf(stderr, "Error while verifying quote!\n");
@@ -192,7 +197,7 @@ int main(int argc, char const *argv[]) {
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response, nodes_number);
           have_to_read = 0;
-          free(read_attest_message);
+          //free(read_attest_message);
           for(j = 0; j < nodes_number; j++)
             verified_nodes[j] = 0;
         }
@@ -456,10 +461,10 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
   if (md_len_sha256 <= 0)
     return false;
 
-  free(pcr_sha1);
-  free(digest_sha1);
-  free(pcr_sha256);
-  free(digest_sha256);
+  //free(pcr_sha1);
+  //free(digest_sha1);
+  //free(pcr_sha256);
+  //free(digest_sha256);
   // do not free ak_path because it points to the actual path, otherwise it will free the actual data and the so it will be lost
   return true;
 }
