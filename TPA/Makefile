@@ -3,7 +3,7 @@ CC = gcc
 CFLAGS = -g
 
 # define the C source files
-SRCS = PoC_TPA.c ../../WAM/WAM.c tpm2_createek.c tpm2_createak.c tpm2_quote.c\
+SRCS = PoC_TPA.c /home/pi/WAM/WAM.c tpm2_createek.c tpm2_createak.c tpm2_quote.c\
  createek_util.c createak_util.c PCR9Extend.c PEMconvertPub.c ../IMA/ima_read_writeOut_binary.c
 
 # define any library to link into executable:

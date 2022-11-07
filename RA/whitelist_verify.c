@@ -45,12 +45,12 @@ int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsig
 }
 
 bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size) {
-  unsigned char digest[DIGEST_LEN];
+  unsigned char digest[SHA256_DIGEST_LENGTH*2];
   int file_path_len = 0;
   int i = 0;
   for (i = 0; i < size; i++) {
     fscanf(fp, "%s %d", white_entries[i].digest, &file_path_len);
-    white_entries[i].digest[DIGEST_LEN] = '\0';
+    white_entries[i].digest[SHA256_DIGEST_LENGTH*2] = '\0';
     white_entries[i].path = malloc(file_path_len * sizeof(char));
     fscanf(fp, "%s", white_entries[i].path);
     // fprintf(stdout, "%s %s\n", white_entries[i].digest, white_entries[i].path);
@@ -191,12 +191,13 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
     if (white_entries != NULL) {
       int entry_index = match_IMApath_Whitepath(path_field, field_path_len, white_entries, white_entries_size);
 
-      unsigned char string_digest[DIGEST_LEN];
+      unsigned char string_digest[SHA256_DIGEST_LENGTH*2+1];
       int k = 0;
       if (!is_sha1) {
         for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
           sprintf(&string_digest[i * 2], "%02x", currentEntryFileHash[i]);
         }
+        string_digest[SHA256_DIGEST_LENGTH*2] = '\0';
       }
       if (entry_index >= 0) {
         if (strcmp(white_entries[entry_index].digest, string_digest)) {
@@ -226,25 +227,9 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
   return 0;
 }
 
-bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha256, IMA_LOG_BLOB ima_log_blob, VERIFICATION_RESPONSE *ver_response) {
+bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha256, IMA_LOG_BLOB ima_log_blob, VERIFICATION_RESPONSE *ver_response, WHITELIST_TABLE whitelist_table) {
   struct event template;
-  struct whitelist_entry *white_entries = NULL;
-  FILE *whitelist_fp;
   int num_entries = 0, i;
-
-  whitelist_fp = fopen("whitelist", "rb");
-  if (!whitelist_fp) {
-    fprintf(stdout, "\nNo whitelist file found! Skipping whitelist verification!\n\n");
-  } else {
-    fscanf(whitelist_fp, "%d", &num_entries);
-    white_entries = malloc(num_entries * sizeof(struct whitelist_entry));
-    if (!white_entries) {
-      fprintf(stdout, "OOM %d\n", num_entries);
-      exit(-1);
-    }
-    loadWhitelist(whitelist_fp, white_entries, num_entries);
-    fclose(whitelist_fp);
-  }
 
   ver_response->tag = 5;
   ver_response->number_white_entries = 0;
@@ -257,7 +242,7 @@ bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha2
       //free(white_entries);
       return false;
     }
-    if (read_template_data(ima_log_blob.logEntry[i], white_entries, num_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {
+    if (read_template_data(ima_log_blob.logEntry[i], whitelist_table.white_entries, num_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {
       printf("\nReading of measurement entry failed\n");
       return false;
     }

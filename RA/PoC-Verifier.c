@@ -15,18 +15,19 @@ int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, 
 bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
             TO_SEND TpaData, int nodes_number);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
-      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, int nodes_number);
+      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
 
 int main(int argc, char const *argv[]) {
   int i, j, *verified_nodes;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
+  WHITELIST_TABLE *whitelist_table;
   FILE *index_file, **ak_files;
   
-  IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, write_response_index;
+  IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index;
   uint8_t mykey[]="supersecretkeyforencryptionalby";
-	WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak;
+	WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak, *ch_read_whitelist;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
@@ -50,9 +51,12 @@ int main(int argc, char const *argv[]) {
   ver_response = malloc(nodes_number * sizeof(VERIFICATION_RESPONSE));
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
+  ch_read_whitelist = malloc(nodes_number * sizeof(WAM_channel));
   read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
   read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
+  read_indexes_whitelist = malloc(nodes_number * sizeof(IOTA_Index));
   ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
+  whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
   ak_files = malloc(nodes_number * sizeof(FILE *));
   offset = malloc(nodes_number * sizeof(uint32_t));
   previous_msg_num = malloc(nodes_number * sizeof(uint16_t));
@@ -72,7 +76,7 @@ int main(int argc, char const *argv[]) {
     fprintf(stdout, "Cannot open index file\n");
     return -1;
   }
-  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, read_indexes, read_indexes_AkPub, nodes_number);
+  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, read_indexes, read_indexes_AkPub, read_indexes_whitelist, nodes_number);
   fclose(index_file);
 
   // Set read index of heartbeat
@@ -80,15 +84,18 @@ int main(int argc, char const *argv[]) {
 	set_channel_index_read(&ch_read_hearbeat, heartBeat_index.index);
   // Set indexes for reading TpaData
   for(i = 0; i < nodes_number; i++){
-    //fprintf(stdout, "Setting index: "); hex_print(read_indexes[i].index, INDEX_SIZE);
     WAM_init_channel(&ch_read_attest[i], i, &privatenet, &k, &a);
     set_channel_index_read(&ch_read_attest[i], read_indexes[i].index);
   }
   // Set indexes for reading Tpas AK
   for(i = 0; i < nodes_number; i++){
-    //fprintf(stdout, "Setting index: "); hex_print(read_indexes_AkPub[i].index, INDEX_SIZE);
     WAM_init_channel(&ch_read_ak[i], i, &privatenet, &k, &a);
     set_channel_index_read(&ch_read_ak[i], read_indexes_AkPub[i].index);
+  }
+  // Set indexes for reading Tpas whitelists
+  for(i = 0; i < nodes_number; i++){
+    WAM_init_channel(&ch_read_whitelist[i], i, &privatenet, &k, &a);
+    set_channel_index_read(&ch_read_whitelist[i], read_indexes_whitelist[i].index);
   }
 
   // Set write index for response to heartbeat 
@@ -102,6 +109,15 @@ int main(int argc, char const *argv[]) {
     read_and_save_AKs(&ch_read_ak[i], ak_table, ak_files[i], i);
   }
   fprintf(stdout, "AK map constructed\n");
+
+  for(i = 0; i < nodes_number; i++){
+    read_and_save_whitelist(&ch_read_whitelist[i], whitelist_table, i);
+  }
+  fprintf(stdout, "Whitelist map constructed\n");
+
+  // Construct a whitelist map --> each verification has to be done w.r.t. the whitelist of the attested node.
+  // Each node/TPA is recognized thanks to the hash of the public key read from the previous step
+  // Read the whitelist from the tangle! So every TPA has to upload its whitelist before the process starts
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
@@ -148,8 +164,13 @@ int main(int argc, char const *argv[]) {
             }
 
             // PCR10 calculation + whitelist verify
+            int white_index = getIndexFromDigest(TpaData[i].ak_digest_blob.buffer, whitelist_table, nodes_number);
+            if(white_index < 0){
+              fprintf(stdout, "Error while retrieving correct whitelist from TPA Ak digest\n");
+              goto end;
+            }
             fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
-            if(!verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob, &ver_response[i])){
+            if(!verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob, &ver_response[i], whitelist_table[white_index])){
               fprintf(stdout, "Error while calculating pcr10s or verifying whitelist\n");
               goto end;
             }
@@ -229,10 +250,11 @@ bool legal_int(const char *str) {
 }
 
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
-      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, int nodes_number) {
+      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, int nodes_number) {
   int len_file, i = 0;
   char *data = NULL, read_index_base_str[20] = "read_index_", akread_index_base_str[20] = "AkPub_read_";
   char akpub_index_base_str[20]="pub_key_", index_AkPub_base_str[25]="AkPub_read_pubkey_";
+  char whitelist_index_base_str[30]="whitelist_read_", whitelist_index_read_base_str[40]="whitelist_read_pubkey_";
 
   //get len of file
   fseek(index_file, 0L, SEEK_END);
@@ -264,6 +286,12 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
     index_AkPub_base_str[18] = (i + 1) + '0';
     hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akread_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes_AkPub[i].index, INDEX_SIZE);
     hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, index_AkPub_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_AkPub[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+  }
+  for(i = 0; i < nodes_number; i++){
+    whitelist_index_base_str[15] = (i + 1) + '0';
+    whitelist_index_read_base_str[22] = (i + 1) + '0';
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes_whitelist[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_read_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES);
   }
   
   free(data);

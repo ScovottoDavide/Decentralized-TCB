@@ -12,6 +12,7 @@
 #include <tss2/tss2_mu.h>
 
 #include "read_akpub.h"
+#include "load_whitelists.h"
 
 #define BUFFER_SIZE(type, field) (sizeof((((type *)NULL)->field)))
 #define TPM2B_TYPE_INIT(type, field) { .size = BUFFER_SIZE(type, field), }

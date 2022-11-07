@@ -2,12 +2,12 @@
 CC = gcc -g
 
 # define the C source files
-SRCS = PoC-Verifier.c tpm2_checkquote.c whitelist_verify.c read_akpub.c load_whitelists.c /home/pi/WAM/WAM.c
+SRCS = whitelistUpload.c /home/pi/WAM/WAM.c
 
 # define any library to link into executable:
 # if I want to link libraries (libx.so or libx.a) I use the -llibname option
 FLAGS =\
--ltss2-esys -ltss2-tctildr -ltss2-mu -lssl #-lcrypto
+ -lssl #-lcrypto
 
 LDFLAGS+=\
 -I/home/pi/iota.c/build/include/ \
@@ -21,7 +21,7 @@ LDFLAGS += \
 -liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium
 
 # define the executable file
-MAIN = Verifier
+MAIN = uploadWhitelist
 
 .PHONY: all
 all:
