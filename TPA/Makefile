@@ -23,7 +23,7 @@ LDFLAGS += \
 -liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium
 
 # define the executable file
-MAIN = TPA
+MAIN = PoC_TPA
 
 .PHONY: all
 all:
