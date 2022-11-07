@@ -200,8 +200,8 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
       }
       if (entry_index >= 0) {
         if (strcmp(white_entries[entry_index].digest, string_digest)) {
-          fprintf(stdout, "State Untrusted: ");
-          fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
+          //fprintf(stdout, "State Untrusted: ");
+          //fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
           if(ver_response->number_white_entries + 1 > white_entries_size) {
             //fprintf(stdout, "Expected untrusted entries limit exceeded\n");
           } else {

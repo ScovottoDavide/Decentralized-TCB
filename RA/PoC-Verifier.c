@@ -154,6 +154,11 @@ int main(int argc, char const *argv[]) {
               goto end;
             }
 
+            fprintf(stdout, "Verification response built: \n");
+            fprintf(stdout, "tag = %d, number of entries = %d\n", ver_response[i].tag, ver_response[i].number_white_entries);
+            for(j = 0; j < ver_response[i].number_white_entries; j++)
+              fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
+
             /*fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
             fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
             fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
