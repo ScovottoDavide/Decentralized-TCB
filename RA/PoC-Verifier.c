@@ -137,7 +137,7 @@ int main(int argc, char const *argv[]) {
           else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
             fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest[i].recv_bytes);
             parseTPAdata(TpaData, read_attest_message[i], i);
-            //free(read_attest_message[i]);
+            free(read_attest_message[i]);
             have_to_read += 1;
             
             // Get also pcr10 since we're reading pcrs here
@@ -197,7 +197,7 @@ int main(int argc, char const *argv[]) {
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response, nodes_number);
           have_to_read = 0;
-          //free(read_attest_message);
+          free(read_attest_message);
           for(j = 0; j < nodes_number; j++)
             verified_nodes[j] = 0;
         }
