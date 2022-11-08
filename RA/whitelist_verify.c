@@ -9,7 +9,7 @@ int getIndexForPCR(PCRS_MEM *pcrs_mem, u_int8_t *ak_digest, int nodes_number){
 }
 
 void preparePCRSmap(PCRS_MEM *pcrs_mem, AK_FILE_TABLE *ak_table, int node_number){
-  memcpy(pcrs_mem[node_number].ak_digest, ak_table->ak_md, SHA256_DIGEST_LENGTH);
+  memcpy(pcrs_mem[node_number].ak_digest, ak_table[node_number].ak_md, SHA256_DIGEST_LENGTH);
   pcrs_mem[node_number].ak_digest[SHA256_DIGEST_LENGTH]='\0';
 }
 
