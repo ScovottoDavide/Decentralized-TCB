@@ -1,5 +1,18 @@
 #include "whitelist_verify.h"
 
+int getIndexForPCR(PCRS_MEM *pcrs_mem, u_int8_t *ak_digest, int nodes_number){
+  for(int i = 0; i < nodes_number; i++){
+        if(memcmp(ak_digest, pcrs_mem[i].ak_digest, SHA256_DIGEST_LENGTH) == 0)
+            return i;
+    }
+    return -1;
+}
+
+void preparePCRSmap(PCRS_MEM *pcrs_mem, AK_FILE_TABLE *ak_table, int node_number){
+  memcpy(pcrs_mem[node_number].ak_digest, ak_table->ak_md, SHA256_DIGEST_LENGTH);
+  pcrs_mem[node_number].ak_digest[SHA256_DIGEST_LENGTH]='\0';
+}
+
 int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned char *digest, int size) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
@@ -42,20 +55,6 @@ int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsig
   EVP_MD_CTX_free(mdctx);
 
   return md_len;
-}
-
-bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size) {
-  unsigned char digest[SHA256_DIGEST_LENGTH*2];
-  int file_path_len = 0;
-  int i = 0;
-  for (i = 0; i < size; i++) {
-    fscanf(fp, "%s %d", white_entries[i].digest, &file_path_len);
-    white_entries[i].digest[SHA256_DIGEST_LENGTH*2] = '\0';
-    white_entries[i].path = malloc(file_path_len * sizeof(char));
-    fscanf(fp, "%s", white_entries[i].path);
-    // fprintf(stdout, "%s %s\n", white_entries[i].digest, white_entries[i].path);
-  }
-  return true;
 }
 
 /* returns the index of the white_entries vector if match is found, otherwise -1 is returned */

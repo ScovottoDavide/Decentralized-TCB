@@ -268,24 +268,31 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
 
   memcpy(to_send_data + acc, &TpaData.ima_log_blob.tag, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
+  *imaLogBytesSize += sizeof(u_int8_t);
   memcpy(to_send_data + acc, &TpaData.ima_log_blob.size, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
+  *imaLogBytesSize += sizeof(u_int16_t);
   memcpy(to_send_data + acc, &TpaData.ima_log_blob.wholeLog, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
+  *imaLogBytesSize += sizeof(u_int8_t);
 
   for (i = 0; i < TpaData.ima_log_blob.size; i++) {
     // send header
     memcpy(to_send_data + acc, &TpaData.ima_log_blob.logEntry[i].header, sizeof TpaData.ima_log_blob.logEntry[i].header);
     acc += sizeof TpaData.ima_log_blob.logEntry[i].header;
+    *imaLogBytesSize += sizeof TpaData.ima_log_blob.logEntry[i].header;
     // send name
     memcpy(to_send_data + acc, &TpaData.ima_log_blob.logEntry[i].name, TpaData.ima_log_blob.logEntry[i].header.name_len * sizeof(char));
     acc += TpaData.ima_log_blob.logEntry[i].header.name_len * sizeof(char);
+    *imaLogBytesSize += TpaData.ima_log_blob.logEntry[i].header.name_len * sizeof(char);
     // send template data len
     memcpy(to_send_data + acc, &TpaData.ima_log_blob.logEntry[i].template_data_len, sizeof(u_int32_t));
     acc += sizeof(u_int32_t);
+    *imaLogBytesSize += sizeof(u_int32_t);
     // send template data
     memcpy(to_send_data + acc, &TpaData.ima_log_blob.logEntry[i].template_data, TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t));
     acc += TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
+    *imaLogBytesSize += TpaData.ima_log_blob.logEntry[i].template_data_len * sizeof(u_int8_t);
   }
 
   memcpy(to_send_data + acc, &TpaData.ak_digest_blob.tag, sizeof(u_int8_t));
@@ -304,10 +311,10 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
   fprintf(stdout, "\n");
 
   WAM_write(ch_send, to_send_data, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "\t\n DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
+  fprintf(stdout, "\t\n DONE WRITING - Sent bytes = %d, ima = %d\n", bytes_to_send, *imaLogBytesSize);
 
   free(to_send_data);
-  free(TpaData.ima_log_blob.logEntry);
+  //free(TpaData.ima_log_blob.logEntry);
 }
 
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context) {

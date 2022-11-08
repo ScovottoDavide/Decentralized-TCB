@@ -910,14 +910,12 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytes
 
   // Make sure digest from quote matches calculated PCR digest
   res = tpm2_util_verify_digests(&ctx.attest.attested.quote.pcrDigest, &pcr_digest);
-  if (!res)
-  {
+  if (!res) {
     fprintf(stderr, "Error: calculated PCRs digest does not match PCRs digest in the quote\n");
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements", &TpaData->ima_log_blob, imaLogBytesSize) != 0)
-  {
+  if (read_write_IMAb("/sys/kernel/security/integrity/ima/binary_runtime_measurements", &TpaData->ima_log_blob, imaLogBytesSize) != 0) {
     fprintf(stderr, "Error while writing IMA_LOG_OUT\n");
   }
 

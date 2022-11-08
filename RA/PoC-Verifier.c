@@ -22,7 +22,7 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
 int main(int argc, char const *argv[]) {
   int i, j, *verified_nodes;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
-  WHITELIST_TABLE *whitelist_table;
+  WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
   FILE *index_file, **ak_files;
   
   IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index;
@@ -35,7 +35,7 @@ int main(int argc, char const *argv[]) {
 	uint8_t ret = 0, **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
   uint16_t *previous_msg_num;
 
-  unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL, *pcr10_sha256 = NULL, *pcr10_sha1 = NULL;
+  unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL;
 
   if(argc != 3){
     fprintf(stdout, "Please specify the file path and the number of nodes\n");
@@ -49,23 +49,29 @@ int main(int argc, char const *argv[]) {
 
   TpaData = malloc(nodes_number * sizeof(TO_SEND));
   ver_response = malloc(nodes_number * sizeof(VERIFICATION_RESPONSE));
+  ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
+  whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
+  pcrs_mem = malloc(nodes_number * sizeof(PCRS_MEM));
+
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_whitelist = malloc(nodes_number * sizeof(WAM_channel));
+
   read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
   read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
   read_indexes_whitelist = malloc(nodes_number * sizeof(IOTA_Index));
-  ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
-  whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
+
   ak_files = malloc(nodes_number * sizeof(FILE *));
   offset = malloc(nodes_number * sizeof(uint32_t));
   previous_msg_num = malloc(nodes_number * sizeof(uint16_t));
   verified_nodes = calloc(nodes_number, sizeof(int));
 
+  for(i = 0; i < nodes_number; i++){
+    pcrs_mem[i].pcr10_sha1 = calloc((SHA_DIGEST_LENGTH + 1), sizeof(unsigned char));
+    pcrs_mem[i].pcr10_sha256 = calloc((SHA256_DIGEST_LENGTH + 1), sizeof(unsigned char));
+  }
   pcr9_sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
-  pcr10_sha1 = calloc((SHA_DIGEST_LENGTH + 1), sizeof(unsigned char));
   pcr9_sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
-  pcr10_sha256 = calloc((SHA256_DIGEST_LENGTH + 1), sizeof(unsigned char));
 
   IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
@@ -115,6 +121,11 @@ int main(int argc, char const *argv[]) {
       goto end;
   }
   fprintf(stdout, "Whitelist map constructed\n");
+
+  for(i = 0; i < nodes_number; i++){
+    preparePCRSmap(pcrs_mem, ak_table, i);
+  }
+  fprintf(stdout, "PCRS map constructed\n");
 
   // Construct a whitelist map --> each verification has to be done w.r.t. the whitelist of the attested node.
   // Each node/TPA is recognized thanks to the hash of the public key read from the previous step
@@ -170,8 +181,13 @@ int main(int argc, char const *argv[]) {
               fprintf(stdout, "Error while retrieving correct whitelist from TPA Ak digest\n");
               goto end;
             }
+            int pcrs_index = getIndexForPCR(pcrs_mem, TpaData[i].ak_digest_blob.buffer, nodes_number);
+            if(pcrs_index < 0){
+              fprintf(stdout, "Could not retrieve the correct old pcr");
+              goto end;
+            }
             fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
-            if(!verify_PCR10_whitelist(pcr10_sha1, pcr10_sha256, TpaData[i].ima_log_blob, &ver_response[i], whitelist_table[white_index])){
+            if(!verify_PCR10_whitelist(pcrs_mem[pcrs_index].pcr10_sha1, pcrs_mem[pcrs_index].pcr10_sha256, TpaData[i].ima_log_blob, &ver_response[i], whitelist_table[white_index])){
               fprintf(stdout, "Error while calculating pcr10s or verifying whitelist\n");
               goto end;
             }
@@ -186,18 +202,13 @@ int main(int argc, char const *argv[]) {
             fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
             fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);*/
 
-            if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcr10_sha256, pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
+            if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcrs_mem[pcrs_index].pcr10_sha256, pcrs_mem[pcrs_index].pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
               fprintf(stderr, "Error while verifying quote!\n");
               goto end;
             }
             fprintf(stdout, "Quote successfully verified!!!!\n");
 
             verified_nodes[i] = 1;
-
-            for(j = 0; j < SHA_DIGEST_LENGTH; j++)
-              pcr10_sha1[j] = 0; 
-            for(j = 0; j < SHA256_DIGEST_LENGTH; j++)
-              pcr10_sha256[j] = 0;
               
             /*fprintf(stdout, "freeing TpaData %d\n", i);
             free(TpaData[i].sig_blob.buffer); free(TpaData[i].message_blob.buffer); free(TpaData[i].ak_digest_blob.buffer);
@@ -232,8 +243,13 @@ int main(int argc, char const *argv[]) {
 end:
   for(i = 0; i < nodes_number && verified_nodes[i] == 0; i++)
     free(read_attest_message[i]);
+  for(i = 0; i < nodes_number; i++){
+    free(pcrs_mem[i].pcr10_sha1);
+    free(pcrs_mem[i].pcr10_sha256);
+  }
+  free(pcrs_mem);
   free(read_attest_message);
-  free(pcr10_sha1); free(pcr10_sha256); free(pcr9_sha1); free(pcr9_sha256);
+  free(pcr9_sha1); free(pcr9_sha256);
   free(ch_read_attest); free(ch_read_ak); 
   free(read_indexes); free(read_indexes_AkPub);
   free(ak_table); free(ak_files);
