@@ -148,10 +148,6 @@ int main(int argc, char const *argv[]) {
       nonce_blob.tag = (u_int8_t)0;
       nonce_blob.size = sizeof nonce;
       memcpy(nonce_blob.buffer, nonce, nonce_blob.size);
-
-      for (j = 0; j < nonce_blob.size; j++)
-        printf("%02x", nonce_blob.buffer[j]);
-      printf("\n");
     }
     i = 0;
     while(have_to_read > 0){
@@ -163,8 +159,9 @@ int main(int argc, char const *argv[]) {
             previous_msg_num[i] += 1;
           } 
           else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
-            fprintf(stdout, "\nNew quote read! read bytes = %d\n", ch_read_attest[i].recv_bytes);
             parseTPAdata(TpaData, read_attest_message[i], i);
+            fprintf(stdout, "\nNew quote from: "); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
+            fprintf(stdout, " --> read bytes = %d\n", ch_read_attest[i].recv_bytes);
             free(read_attest_message[i]);
             have_to_read += 1;
             
@@ -225,7 +222,6 @@ int main(int argc, char const *argv[]) {
           }
         }
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
-          fprintf(stdout, "All quotes read!\n");
           // write "response" to heartbeat
           fprintf(stdout, "\n\tSending verification response\n");
           sendRAresponse(&ch_write_response, ver_response, nodes_number);
@@ -409,9 +405,6 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
 
-  fprintf(stdout, "Writing at: "); 
-  for(i = 0; i < INDEX_SIZE; i++)
-    fprintf(stdout, "%02x", ch_send->current_index.index[i]);
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
   fprintf(stdout, "\n\t DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
   
