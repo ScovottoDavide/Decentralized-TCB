@@ -190,6 +190,11 @@ int main(int argc, char const *argv[]) {
               goto end;
             }
 
+            fprintf(stdout, "Verification response built: \n");
+            fprintf(stdout, "tag = %d, number of entries = %d\n", ver_response[i].tag, ver_response[i].number_white_entries);
+            for(j = 0; j < ver_response[i].number_white_entries; j++)
+              fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
+
             if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcrs_mem[pcrs_index].pcr10_sha256, pcrs_mem[pcrs_index].pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
               fprintf(stderr, "Error while verifying quote!\n");
               goto end;

@@ -32,11 +32,13 @@ bool read_and_save_whitelist(WAM_channel *ch_read_whitelist, WHITELIST_TABLE *wh
     whitelist_table[node_number].white_entries = malloc(whitelist_table[node_number].number_of_entries * sizeof(struct whitelist_entry));
     for(i = 0; i < whitelist_table[node_number].number_of_entries; i++) {
         memcpy(&whitelist_table[node_number].white_entries[i].digest, read_whitelist_message + acc, sizeof(u_int8_t) * SHA256_DIGEST_LENGTH * 2);
+        whitelist_table[node_number].white_entries[i].digest[SHA256_DIGEST_LENGTH*2] = '\0';
         acc += sizeof(u_int8_t) * SHA256_DIGEST_LENGTH * 2;
         memcpy(&whitelist_table[node_number].white_entries[i].path_len, read_whitelist_message + acc, sizeof(u_int16_t));
         acc += sizeof(u_int16_t);
         whitelist_table[node_number].white_entries[i].path = malloc(sizeof(u_int8_t) * whitelist_table[node_number].white_entries[i].path_len + 1);
         memcpy(whitelist_table[node_number].white_entries[i].path, read_whitelist_message + acc, sizeof(u_int8_t) * whitelist_table[node_number].white_entries[i].path_len);
+        whitelist_table[node_number].white_entries[i].path[whitelist_table[node_number].white_entries[i].path_len] = '\0';
         acc += sizeof(u_int8_t) * whitelist_table[node_number].white_entries[i].path_len;
     }
 
