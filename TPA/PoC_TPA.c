@@ -268,13 +268,10 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
 
   memcpy(to_send_data + acc, &TpaData.ima_log_blob.tag, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  *imaLogBytesSize += sizeof(u_int8_t);
   memcpy(to_send_data + acc, &TpaData.ima_log_blob.size, sizeof(u_int16_t));
   acc += sizeof(u_int16_t);
-  *imaLogBytesSize += sizeof(u_int16_t);
   memcpy(to_send_data + acc, &TpaData.ima_log_blob.wholeLog, sizeof(u_int8_t));
   acc += sizeof(u_int8_t);
-  *imaLogBytesSize += sizeof(u_int8_t);
 
   for (i = 0; i < TpaData.ima_log_blob.size; i++) {
     // send header
