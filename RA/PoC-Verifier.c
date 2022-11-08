@@ -111,7 +111,8 @@ int main(int argc, char const *argv[]) {
   fprintf(stdout, "AK map constructed\n");
 
   for(i = 0; i < nodes_number; i++){
-    read_and_save_whitelist(&ch_read_whitelist[i], whitelist_table, i);
+    if(!read_and_save_whitelist(&ch_read_whitelist[i], whitelist_table, i))
+      goto end;
   }
   fprintf(stdout, "Whitelist map constructed\n");
 
@@ -229,7 +230,7 @@ int main(int argc, char const *argv[]) {
   }
   
 end:
-  for(i = 0; i < nodes_number; i++)
+  for(i = 0; i < nodes_number && verified_nodes[i] == 0; i++)
     free(read_attest_message[i]);
   free(read_attest_message);
   free(pcr10_sha1); free(pcr10_sha256); free(pcr9_sha1); free(pcr9_sha256);

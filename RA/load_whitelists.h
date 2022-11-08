@@ -20,4 +20,4 @@ typedef struct{
 }WHITELIST_TABLE;
 
 int getIndexFromDigest(u_int8_t *ak_digest, WHITELIST_TABLE *whitelist_table, int nodes_number);
-void read_and_save_whitelist(WAM_channel *ch_read_whitelist, WHITELIST_TABLE *whitelist_table, int node_number);
+bool read_and_save_whitelist(WAM_channel *ch_read_whitelist, WHITELIST_TABLE *whitelist_table, int node_number);

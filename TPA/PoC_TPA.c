@@ -65,48 +65,6 @@ int main(int argc, char *argv[]) {
   WAM_init_channel(&ch_send, 1, &privatenet, &k, &a);
   set_channel_index_write(&ch_send, write_index);
 
-  tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
-  if (tss_r != TSS2_RC_SUCCESS) {
-    printf("Could not initialize tcti context\n");
-    exit(-1);
-  }
-  tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
-  if (tss_r != TSS2_RC_SUCCESS) {
-    printf("Could not initialize esys context\n");
-    exit(-1);
-  }
-  /**
-  Assumption: Ek is at NV-Index 0x81000000, AK is at NV-Index 0x81000001
-  and they are the only persistent handles in NV-RAM.
-  See if optimizable!
-  **/
-  // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
-  persistent_handles = tpm2_getCap_handles_persistent(esys_context);
-  if (persistent_handles < 0) {
-    printf("Error while reading persistent handles!\n");
-    exit(-1);
-  }
-  if (!persistent_handles) {
-    fprintf(stdout, "Generating EK...\n");
-    tss_r = tpm2_createek(esys_context);
-    if (tss_r != TSS2_RC_SUCCESS) {
-      printf("Error in tpm2_createek\n");
-      exit(-1);
-    }
-    fprintf(stdout, "Generating AK...\n");
-    tss_r = tpm2_createak(esys_context);
-    if (tss_r != TSS2_RC_SUCCESS) {
-      printf("\tError creating AK\n");
-      exit(-1);
-    }
-    tpm2_getCap_handles_persistent(esys_context);
-  }
-  if (pcr_check_if_zeros(esys_context)) {
-    // Extend both
-    ExtendPCR9(esys_context, "sha1");
-    ExtendPCR9(esys_context, "sha256");
-  }
-
 	while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size){
       expected_size+=32;
@@ -118,6 +76,50 @@ int main(int argc, char *argv[]) {
       if(!ak_md_wrote)
         if(sendAkPub_WAM(&TpaData, &ch_send_AkPub))
           ak_md_wrote = 1;
+      
+      tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
+      if (tss_r != TSS2_RC_SUCCESS) {
+        printf("Could not initialize tcti context\n");
+        exit(-1);
+      }
+      tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
+      if (tss_r != TSS2_RC_SUCCESS) {
+        printf("Could not initialize esys context\n");
+        exit(-1);
+      }
+      /**
+      Assumption: Ek is at NV-Index 0x81000000, AK is at NV-Index 0x81000001
+      and they are the only persistent handles in NV-RAM.
+      See if optimizable!
+      **/
+      // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
+      persistent_handles = tpm2_getCap_handles_persistent(esys_context);
+      if (persistent_handles < 0) {
+        printf("Error while reading persistent handles!\n");
+        exit(-1);
+      }
+      if (!persistent_handles) {
+        fprintf(stdout, "Generating EK...\n");
+        tss_r = tpm2_createek(esys_context);
+        if (tss_r != TSS2_RC_SUCCESS) {
+          printf("Error in tpm2_createek\n");
+          exit(-1);
+        }
+        fprintf(stdout, "Generating AK...\n");
+        tss_r = tpm2_createak(esys_context);
+        if (tss_r != TSS2_RC_SUCCESS) {
+          printf("\tError creating AK\n");
+          exit(-1);
+        }
+        tpm2_getCap_handles_persistent(esys_context);
+      }
+      if (pcr_check_if_zeros(esys_context)) {
+        // Extend both
+        ExtendPCR9(esys_context, "sha1");
+        fprintf(stdout, "PCR9 sha1 extended\n");
+        ExtendPCR9(esys_context, "sha256");
+        fprintf(stdout, "PCR9 sha256 extended\n");
+      }
 
       tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize);
       if (tss_r != TSS2_RC_SUCCESS) {
@@ -127,11 +129,12 @@ int main(int argc, char *argv[]) {
       
       /** SEND DATA TO THE REMOTE ATTESTOR */
       sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
+
+      free(esys_context);
+      free(tcti_context);
     }
   }
 
-  free(esys_context);
-  free(tcti_context);
   return 0;
 }
 

@@ -101,7 +101,7 @@ TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg) {
   }
   hex_digest[i++] = '\0';
 
-  fprintf(stdout, "Digest AK (%s): %s\n", halg, hex_digest);
+  // fprintf(stdout, "Digest AK (%s): %s\n", halg, hex_digest);
 
   TPMI_DH_PCR pcr_index;
   // get PCR id
