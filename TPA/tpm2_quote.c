@@ -903,10 +903,10 @@ TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytes
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  fprintf(stdout, "calcDigest: ");
+  /*fprintf(stdout, "calcDigest: ");
   for (i = 0; i < pcr_digest.size; i++)
     fprintf(stdout, "%02x", pcr_digest.buffer[i]);
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\n");*/
 
   // Make sure digest from quote matches calculated PCR digest
   res = tpm2_util_verify_digests(&ctx.attest.attested.quote.pcrDigest, &pcr_digest);

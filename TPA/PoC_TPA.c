@@ -128,6 +128,7 @@ int main(int argc, char *argv[]) {
       } 
       
       /** SEND DATA TO THE REMOTE ATTESTOR */
+      fprintf(stdout, "Writing...\n");
       sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
 
       free(esys_context);
@@ -301,14 +302,9 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
 
   memcpy(to_send_data + acc, last, sizeof last);
   acc += sizeof last;
-  
-  fprintf(stdout, "ak digest to send: ");
-  for(i = 0; i<TpaData.ak_digest_blob.size; i++)
-    fprintf(stdout, "%02X", TpaData.ak_digest_blob.buffer[i]);
-  fprintf(stdout, "\n");
 
   WAM_write(ch_send, to_send_data, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "\t\n DONE WRITING - Sent bytes = %d, ima = %d\n", bytes_to_send, *imaLogBytesSize);
+  fprintf(stdout, "DONE WRITING - Sent bytes = %d, ima = %d\n\n", bytes_to_send, *imaLogBytesSize);
 
   free(to_send_data);
   //free(TpaData.ima_log_blob.logEntry);

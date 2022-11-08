@@ -131,6 +131,8 @@ int main(int argc, char const *argv[]) {
   // Each node/TPA is recognized thanks to the hash of the public key read from the previous step
   // Read the whitelist from the tangle! So every TPA has to upload its whitelist before the process starts
 
+  fprintf(stdout, "\n\t Reading...\n");
+
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
       // new nonce arrived --> read new attestations
@@ -160,8 +162,7 @@ int main(int argc, char const *argv[]) {
           } 
           else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
             parseTPAdata(TpaData, read_attest_message[i], i);
-            fprintf(stdout, "\nNew quote from: "); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
-            fprintf(stdout, " --> read bytes = %d\n", ch_read_attest[i].recv_bytes);
+            fprintf(stdout, "\tNew quote from [%d bytes]: ", ch_read_attest[i].recv_bytes); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
             free(read_attest_message[i]);
             have_to_read += 1;
             
@@ -189,16 +190,6 @@ int main(int argc, char const *argv[]) {
               goto end;
             }
 
-            fprintf(stdout, "Verification response built: \n");
-            fprintf(stdout, "tag = %d, number of entries = %d\n", ver_response[i].tag, ver_response[i].number_white_entries);
-            for(j = 0; j < ver_response[i].number_white_entries; j++)
-              fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
-
-            /*fprintf(stdout, "PCR9 sha1: "); hex_print(pcr9_sha1, SHA_DIGEST_LENGTH);
-            fprintf(stdout, "PCR10 sha1: "); hex_print(pcr10_sha1, SHA_DIGEST_LENGTH);
-            fprintf(stdout, "PCR9 sha256: "); hex_print(pcr9_sha256, SHA256_DIGEST_LENGTH);
-            fprintf(stdout, "PCR10 sha256: "); hex_print(pcr10_sha256, SHA256_DIGEST_LENGTH);*/
-
             if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcrs_mem[pcrs_index].pcr10_sha256, pcrs_mem[pcrs_index].pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
               fprintf(stderr, "Error while verifying quote!\n");
               goto end;
@@ -223,7 +214,7 @@ int main(int argc, char const *argv[]) {
         }
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
-          fprintf(stdout, "\n\tSending verification response\n");
+          fprintf(stdout, "Sending verification response... ");
           sendRAresponse(&ch_write_response, ver_response, nodes_number);
           have_to_read = 0;
           free(read_attest_message);
@@ -406,7 +397,7 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   acc += sizeof last;
 
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "\n\t DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
+  fprintf(stdout, "DONE WRITING - Sent bytes = %d\n\n", bytes_to_send);
   
   free(response_buff);
 }
