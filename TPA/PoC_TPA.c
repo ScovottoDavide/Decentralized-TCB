@@ -131,8 +131,9 @@ int main(int argc, char *argv[]) {
       fprintf(stdout, "Writing...\n");
       sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
 
-      free(esys_context);
-      free(tcti_context);
+      
+      Esys_Finalize(&esys_context);
+      Tss2_TctiLdr_Finalize (&tcti_context);
     }
   }
 
