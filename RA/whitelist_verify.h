@@ -18,6 +18,7 @@ typedef struct {
 
 int getIndexForPCR(PCRS_MEM *pcrs_mem, u_int8_t *ak_digest, int nodes_number);
 void preparePCRSmap(PCRS_MEM *pcrs_mem, AK_FILE_TABLE *ak_table, int node_number);
+int getIndexFromVerResponse(VERIFICATION_RESPONSE *ver_response, char *path_to_compare, u_int16_t path_len);
 int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned char *digest, int size);
 int computePCR10Aggr(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
 int match_IMApath_Whitepath(const char *imaPath, const u_int32_t imaPath_len, const struct whitelist_entry *white_entries, int white_entries_size);

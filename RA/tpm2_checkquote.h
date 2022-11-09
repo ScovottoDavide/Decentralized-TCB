@@ -76,8 +76,9 @@ typedef struct {
   char *untrusted_path_name;
 } UNTRUSTED_PATH;
 typedef struct {
-  uint8_t tag; // 5
+  uint8_t ak_digest[SHA256_DIGEST_LENGTH+1];
   uint16_t number_white_entries;
+  uint8_t is_quote_successful;
   UNTRUSTED_PATH *untrusted_entries;
 } VERIFICATION_RESPONSE;
 

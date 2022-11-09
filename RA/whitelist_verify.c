@@ -13,6 +13,15 @@ void preparePCRSmap(PCRS_MEM *pcrs_mem, AK_FILE_TABLE *ak_table, int node_number
   pcrs_mem[node_number].ak_digest[SHA256_DIGEST_LENGTH]='\0';
 }
 
+int getIndexFromVerResponse(VERIFICATION_RESPONSE *ver_response, char *path_to_compare, u_int16_t path_len) {
+  int i;
+  for(i = 0; i < ver_response->number_white_entries; i++){
+    if(strncmp(ver_response->untrusted_entries[i].untrusted_path_name, path_to_compare, path_len) == 0)
+      return i;
+  }
+  return -1;
+}
+
 int computeTemplateDigest(unsigned char *template, const char *sha_alg, unsigned char *digest, int size) {
   EVP_MD_CTX *mdctx;
   const EVP_MD *md;
@@ -71,7 +80,7 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
     int white_entries_size, unsigned char pcr10_sha256[SHA256_DIGEST_LENGTH + 1], unsigned char pcr10_sha1[SHA_DIGEST_LENGTH + 1], 
     VERIFICATION_RESPONSE *ver_response)
 {
-  int len, is_ima_template, is_imang_template, i, k = 0, j;
+  int len, is_ima_template, is_imang_template, i, k = 0, j, ver_responseIndex;
   u_int8_t *pcr_concatenated = calloc(SHA256_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
   u_int8_t *pcr_concatenated_sha1 = calloc(SHA_DIGEST_LENGTH * 2 + 1, sizeof(u_int8_t));
   u_int8_t *entry_aggregate = NULL;
@@ -199,54 +208,58 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
         string_digest[SHA256_DIGEST_LENGTH*2] = '\0';
       }
       if (entry_index >= 0) {
-        if (strcmp(white_entries[entry_index].digest, string_digest)) {
+        ver_responseIndex = getIndexFromVerResponse(ver_response, white_entries[entry_index].path, white_entries[entry_index].path_len);
+        if (strncmp(white_entries[entry_index].digest, string_digest, SHA256_DIGEST_LENGTH*2)) {
           //fprintf(stdout, "State Untrusted: ");
           //fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
-          if(ver_response->number_white_entries + 1 > white_entries_size) {
-            //fprintf(stdout, "Expected untrusted entries limit exceeded\n");
-          } else {
-            ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)field_path_len;
-            ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name = malloc(ver_response->untrusted_entries[ver_response->number_white_entries].name_len + 1 * sizeof(char));
-            strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, field_path_len);
-            ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name[field_path_len] = '\0';
-            ver_response->number_white_entries += 1;
+          if(ver_response->number_white_entries + 1 <= white_entries_size) {
+            if(ver_responseIndex < 0){  // add new entry
+              ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)field_path_len;
+              ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name = malloc(ver_response->untrusted_entries[ver_response->number_white_entries].name_len + 1 * sizeof(char));
+              strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, field_path_len);
+              ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name[field_path_len] = '\0';
+              ver_response->number_white_entries += 1;
+            } 
           }
-        }/*else {
-          fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
-        }*/
+        }
+        else {
+          //fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
+          if(ver_responseIndex >= 0){ // means that was previously untrusted --> remote it from the response
+            ver_response->untrusted_entries[ver_responseIndex].name_len = 0;
+            free(ver_response->untrusted_entries[ver_responseIndex].untrusted_path_name);
+            ver_response->number_white_entries -= 1;
+          }
+        }
       }
     }
-    //free(path_field);
+    free(path_field);
   }
-  /*free(currentTemplateMD); 
+  free(currentTemplateMD); 
   free(currentTemplateMD_sha1);
   free(pcr_concatenated); 
   free(pcr_concatenated_sha1);
-  free(entry_aggregate);*/
+  free(entry_aggregate);
   return 0;
 }
 
 bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha256, IMA_LOG_BLOB ima_log_blob, VERIFICATION_RESPONSE *ver_response, WHITELIST_TABLE whitelist_table) {
   struct event template;
-  int num_entries = 0, i;
+  int i;
 
-  ver_response->tag = 5;
   ver_response->number_white_entries = 0;
   // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
-  ver_response->untrusted_entries = malloc(num_entries * sizeof(UNTRUSTED_PATH));
+  ver_response->untrusted_entries = malloc(whitelist_table.number_of_entries * sizeof(UNTRUSTED_PATH));
 
   for (i = 0; i < ima_log_blob.size; i++) {
     if (ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX) {
       fprintf(stdout, "%d ERROR: event name too long!\n", template.header.name_len);
-      //free(white_entries);
       return false;
     }
-    if (read_template_data(ima_log_blob.logEntry[i], whitelist_table.white_entries, num_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {
+    if (read_template_data(ima_log_blob.logEntry[i], whitelist_table.white_entries, whitelist_table.number_of_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {
       printf("\nReading of measurement entry failed\n");
       return false;
     }
   }
-    
-  //free(white_entries);
+
   return true;
 }

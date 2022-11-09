@@ -184,22 +184,25 @@ int main(int argc, char const *argv[]) {
               fprintf(stdout, "Could not retrieve the correct old pcr");
               goto end;
             }
+            memcpy(&ver_response[i].ak_digest, whitelist_table[white_index].ak_digest, SHA256_DIGEST_LENGTH);
+            ver_response[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
             fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
             if(!verify_PCR10_whitelist(pcrs_mem[pcrs_index].pcr10_sha1, pcrs_mem[pcrs_index].pcr10_sha256, TpaData[i].ima_log_blob, &ver_response[i], whitelist_table[white_index])){
               fprintf(stdout, "Error while calculating pcr10s or verifying whitelist\n");
               goto end;
             }
 
-            fprintf(stdout, "Verification response built: \n");
-            fprintf(stdout, "tag = %d, number of entries = %d\n", ver_response[i].tag, ver_response[i].number_white_entries);
+            if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcrs_mem[pcrs_index].pcr10_sha256, pcrs_mem[pcrs_index].pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
+              ver_response[i].is_quote_successful = 0;
+              fprintf(stdout, "Quote verification failed!!!!\n");
+            } else{
+              ver_response[i].is_quote_successful = 1;
+              fprintf(stdout, "Quote successfully verified!!!!\n");
+            } 
+
+            fprintf(stdout, "Verification response built for: "); hex_print(ver_response[i].ak_digest, SHA256_DIGEST_LENGTH);
             for(j = 0; j < ver_response[i].number_white_entries; j++)
               fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
-
-            if (!tpm2_checkquote(TpaData[i], nonce_blob, ak_table, nodes_number, pcrs_mem[pcrs_index].pcr10_sha256, pcrs_mem[pcrs_index].pcr10_sha1, pcr9_sha256, pcr9_sha1)) {
-              fprintf(stderr, "Error while verifying quote!\n");
-              goto end;
-            }
-            fprintf(stdout, "Quote successfully verified!!!!\n");
 
             verified_nodes[i] = 1;
               
@@ -372,7 +375,7 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   uint8_t last[4] = "done", *response_buff = NULL;
   
   for(i = 0; i < nodes_number; i++){
-    bytes_to_send += sizeof(uint8_t) + sizeof(uint16_t); // tag + number of untrsuted entries
+    bytes_to_send += (sizeof(uint8_t)*SHA256_DIGEST_LENGTH) + sizeof(uint16_t) + sizeof(uint8_t); // tag + number of untrsuted entries + is_quote_successful
     for(j = 0; j < ver_response[i].number_white_entries; j++){
       bytes_to_send += sizeof(uint16_t);
       bytes_to_send += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
@@ -387,10 +390,12 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   }
 
   for(i = 0; i < nodes_number; i++){
-    memcpy(response_buff + acc, &ver_response[i].tag, sizeof(uint8_t));
-    acc += sizeof(uint8_t);
+    memcpy(response_buff + acc, &ver_response[i].ak_digest, sizeof(uint8_t)*SHA256_DIGEST_LENGTH);
+    acc += sizeof(uint8_t)*SHA256_DIGEST_LENGTH;
     memcpy(response_buff + acc, &ver_response[i].number_white_entries, sizeof(uint16_t));
     acc += sizeof(uint16_t);
+    memcpy(response_buff + acc, &ver_response[i].is_quote_successful, sizeof(uint8_t));
+    acc += sizeof(uint8_t);
     for(j = 0; j < ver_response[i].number_white_entries; j++){
       memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].name_len, sizeof(uint16_t));
       acc += sizeof(uint16_t);
