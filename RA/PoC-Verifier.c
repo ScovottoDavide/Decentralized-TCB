@@ -127,11 +127,17 @@ int main(int argc, char const *argv[]) {
   }
   fprintf(stdout, "PCRS map constructed\n");
 
+  for(i = 0; i < nodes_number; i++){
+    ver_response[i].number_white_entries = 0;
+    // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
+    ver_response[i].untrusted_entries = malloc(whitelist_table[i].number_of_entries * sizeof(UNTRUSTED_PATH));
+  }
+
   // Construct a whitelist map --> each verification has to be done w.r.t. the whitelist of the attested node.
   // Each node/TPA is recognized thanks to the hash of the public key read from the previous step
   // Read the whitelist from the tangle! So every TPA has to upload its whitelist before the process starts
 
-  fprintf(stdout, "\n\t Reading...\n");
+  fprintf(stdout, "\n Reading...\n");
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){

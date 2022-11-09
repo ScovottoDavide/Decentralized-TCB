@@ -246,10 +246,6 @@ bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha2
   struct event template;
   int i;
 
-  ver_response->number_white_entries = 0;
-  // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
-  ver_response->untrusted_entries = malloc(whitelist_table.number_of_entries * sizeof(UNTRUSTED_PATH));
-
   for (i = 0; i < ima_log_blob.size; i++) {
     if (ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX) {
       fprintf(stdout, "%d ERROR: event name too long!\n", template.header.name_len);
