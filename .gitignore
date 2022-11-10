@@ -1,0 +1,13 @@
+*
+!*.c
+!*.h
+!*.py
+!*.pdf
+!*.md
+!TPA
+!RA
+!IMA
+!Whitelisting_Utils
+!Literature
+!Makefile
+!.gitignore
