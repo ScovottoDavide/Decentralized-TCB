@@ -46,7 +46,7 @@ bool legal_int(const char *str) {
 void menu(void *in) {
     int input;
     fprintf(stdout, "Press [1] --> Stop Heartbeat\n");
-    scanf("%d", &input);
+    scanf("%d%*c", &input);
     if(input == 1){
         pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         heartBeat_status = 1;
@@ -93,19 +93,15 @@ void PoC_heartbeat(void *nodes_number_p) {
     hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, file_index.keys.pub, ED_PUBLIC_KEY_BYTES);
     hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, file_index.keys.priv, ED_PRIVATE_KEY_BYTES);
 
-    /*
-    * char prefix[12]="read_index_";
-    * char buf_str[152] = {0};
-    * ...
-    * snprintf(buf_str, 152, "%s%d", prefix, i+1);
-    */
-
     for(i = 0; i<nodes_number; i++){
         //prefix_str_index[11] = (i + 1) + '0';
         //prefix_str_pubK[8] = (i + 1) + '0';
         snprintf(buf_index_str, 100, "%s%d", prefix_str_index, i+1);
-        fprintf(stdout, "%s\n", buf_index_str);
-        hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, buf_index_str)->valuestring, INDEX_HEX_SIZE, read_response_indexes[i].index, INDEX_SIZE);
+        char *ciao = cJSON_GetObjectItemCaseSensitive(json, buf_index_str)->valuestring;
+        int abc = 0;
+        abc = hex_2_bin(ciao, strlen(ciao), read_response_indexes[i].index, INDEX_SIZE);
+        //fprintf(stdout, "ciao = %s, strlen = %d, %d %d, abc = %d\n",ciao, strlen(ciao), INDEX_HEX_SIZE, INDEX_SIZE, abc);
+        snprintf(buf_index_str, 100, "%s%d", prefix_str_pubK, i+1);
         hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, buf_index_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_response_indexes[i].keys.pub, ED_PUBLIC_KEY_BYTES);
     }   
 
@@ -151,7 +147,7 @@ void PoC_heartbeat(void *nodes_number_p) {
             if(responses_map[i] == 0){
                 if(!WAM_read(&ch_read_responses[i], expected_response_messages, &expected_response_size)){
                     if(ch_read_responses[i].recv_msg != previous_msg_num[i]){
-                        memcpy((read_response_messages[i] + offset[i]), expected_response_messages, DATA_SIZE);
+                        memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);
                         offset[i] += DATA_SIZE;
                         previous_msg_num[i] += 1;
                     }
@@ -183,15 +179,15 @@ void PoC_heartbeat(void *nodes_number_p) {
         }  
     }
 end:
-    /*for(i = 0; i < nodes_number; i++){
+    for(i = 0; i < nodes_number; i++){
         if(read_response_messages[i] != NULL)
             free(read_response_messages[i]);
     }
-    if(read_response_messages!=NULL) free(read_response_messages);*/
-    //if(responses_map!=NULL) free(responses_map);
-    //if(data != NULL) free(data);
-    //if(ch_read_responses != NULL) free(ch_read_responses);
-    //if(read_response_indexes!= NULL) free(read_response_indexes);
-    //if(json != NULL) cJSON_Delete(json);
+    if(read_response_messages!=NULL) free(read_response_messages);
+    if(responses_map!=NULL) free(responses_map);
+    if(data != NULL) free(data);
+    if(ch_read_responses != NULL) free(ch_read_responses);
+    if(read_response_indexes!= NULL) free(read_response_indexes);
+    if(json != NULL) cJSON_Delete(json);
     return ;
 }
