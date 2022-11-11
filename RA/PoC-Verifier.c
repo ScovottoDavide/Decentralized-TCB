@@ -5,7 +5,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <openssl/rand.h>
-#include <pthread.h>
 #include "whitelist_verify.h"
 #include "/home/pi/WAM/WAM.h"
 
@@ -29,7 +28,6 @@ void PoC_Verifier(void *input);
 
 volatile int verifier_status = 0; // 0 -> do not stop; 1 --> stop the process
 pthread_mutex_t menuLock;
-
 
 int main(int argc, char const *argv[]) {
   ARGS *args = malloc(sizeof(ARGS)); 
@@ -56,7 +54,7 @@ int main(int argc, char const *argv[]) {
 
 void menu(void *in) {
     int input;
-    fprintf(stdout, "Press [1] --> Stop Heartbeat\n");
+    fprintf(stdout, "Press [1] --> Stop Verifier\n");
     scanf("%d%*c", &input);
     if(input == 1){
         pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
@@ -151,7 +149,11 @@ void PoC_Verifier(void *input){
   cleanUpFolder("/etc/tc/TPA_AKs");
   srand((unsigned int)(time(NULL)));
   for(i = 0; i < nodes_number; i++){
-    read_and_save_AKs(&ch_read_ak[i], ak_table, ak_files[i], i);
+    int res = read_and_save_AKs(&ch_read_ak[i], ak_table, ak_files[i], i, &verifier_status, menuLock);
+    if(res < 0){
+      fprintf(stdout, "Verifier Stopped while waiting for AK pubs of TPAs\n");
+      goto early_end;
+    }
   }
   fprintf(stdout, "AK map constructed\n");
 
@@ -290,17 +292,6 @@ end:
       free(read_attest_message[i]);
   if(read_attest_message != NULL) free(read_attest_message);
   for(i = 0; i < nodes_number; i++){
-    free(pcrs_mem[i].pcr10_sha1);
-    free(pcrs_mem[i].pcr10_sha256);
-  }
-  free(pcrs_mem);
-  free(pcr9_sha1); free(pcr9_sha256);
-  free(ch_read_attest); free(ch_read_ak); free(ch_read_whitelist);
-  free(read_indexes); free(read_indexes_AkPub); free(read_indexes_whitelist);
-  free(ak_files);
-  free(offset); free(previous_msg_num);
-  free(verified_nodes);
-  for(i = 0; i < nodes_number; i++){
     free(TpaData[i].sig_blob.buffer);
     free(TpaData[i].message_blob.buffer);
     free(TpaData[i].ak_digest_blob.buffer);
@@ -312,10 +303,19 @@ end:
     free(whitelist_table[i].white_entries);
     free(ver_response[i].untrusted_entries);
   }
-  free(ver_response);
-  free(whitelist_table);
-  free(ak_table); 
-  free(TpaData);
+early_end:
+  free(TpaData); free(ver_response); free(ak_table); free(whitelist_table);
+  for(i = 0; i < nodes_number; i++){
+    free(pcrs_mem[i].pcr10_sha1);
+    free(pcrs_mem[i].pcr10_sha256);
+  }
+  free(pcrs_mem);
+  free(pcr9_sha1); free(pcr9_sha256);
+  free(ch_read_attest); free(ch_read_ak); free(ch_read_whitelist);
+  free(read_indexes); free(read_indexes_AkPub); free(read_indexes_whitelist);
+  free(ak_files);
+  free(offset); free(previous_msg_num);
+  free(verified_nodes);
   return ;
 }
 

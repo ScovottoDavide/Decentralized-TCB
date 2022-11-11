@@ -3,6 +3,7 @@
 #include <string.h>
 #include <openssl/rand.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tctildr.h>
 #include "tpm2_createek.h"
@@ -18,7 +19,43 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub);
 
+void PoC_TPA(void *input);
+void menu(void *in);
+
+volatile int tpa_status = 0; // 0 -> do not stop; 1 --> stop the process
+pthread_mutex_t menuLock;
+
 int main(int argc, char *argv[]) {
+  pthread_t th_tpa, th_menu;
+
+  if(argc != 2){
+    fprintf(stdout, "Please specify the file path of the 'indexation' file\n");
+    return -1;
+  }    
+
+  pthread_create(&th_menu, NULL, (void *)&PoC_TPA, (void *) argv[1]);
+  pthread_create(&th_menu, NULL, (void *)&menu, NULL);
+
+  pthread_join(th_tpa, NULL);
+  pthread_join(th_menu, NULL);
+  return 0;
+}
+
+void menu(void *in) {
+    int input;
+    fprintf(stdout, "Press [1] --> Stop TPA\n");
+    scanf("%d%*c", &input);
+    if(input == 1){
+        pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+        fprintf(stdout, "Waiting to process the last data. Gracefully stopping the TPA!\n");
+        tpa_status = 1;
+        pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+    }
+}
+
+void PoC_TPA(void *input) {
+  char *file_index_path_name = ((char *)input);
+
   // TPM
   TSS2_RC tss_r;
   ESYS_CONTEXT *esys_context = NULL;
@@ -41,16 +78,11 @@ int main(int argc, char *argv[]) {
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14265,
 							 .tls = false};
-  
-  if(argc != 2){
-    fprintf(stdout, "Please specify the file path of the 'indexation' file\n");
-    return -1;
-  }    
 
-  index_file = fopen(argv[1], "r");
+  index_file = fopen(file_index_path_name, "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
-    return -1;
+    return ;
   }
   get_Index_from_file(index_file, &heartBeat_index, &write_index, &write_index_AkPub);
   fclose(index_file);
@@ -80,12 +112,12 @@ int main(int argc, char *argv[]) {
       tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
       if (tss_r != TSS2_RC_SUCCESS) {
         printf("Could not initialize tcti context\n");
-        exit(-1);
+        return ;
       }
       tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
       if (tss_r != TSS2_RC_SUCCESS) {
         printf("Could not initialize esys context\n");
-        exit(-1);
+        return ;
       }
       /**
       Assumption: Ek is at NV-Index 0x81000000, AK is at NV-Index 0x81000001
@@ -96,20 +128,20 @@ int main(int argc, char *argv[]) {
       persistent_handles = tpm2_getCap_handles_persistent(esys_context);
       if (persistent_handles < 0) {
         printf("Error while reading persistent handles!\n");
-        exit(-1);
+        return ;
       }
       if (!persistent_handles) {
         fprintf(stdout, "Generating EK...\n");
         tss_r = tpm2_createek(esys_context);
         if (tss_r != TSS2_RC_SUCCESS) {
           printf("Error in tpm2_createek\n");
-          exit(-1);
+          return ;
         }
         fprintf(stdout, "Generating AK...\n");
         tss_r = tpm2_createak(esys_context);
         if (tss_r != TSS2_RC_SUCCESS) {
           printf("\tError creating AK\n");
-          exit(-1);
+          return ;
         }
         tpm2_getCap_handles_persistent(esys_context);
       }
@@ -124,20 +156,31 @@ int main(int argc, char *argv[]) {
       tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize);
       if (tss_r != TSS2_RC_SUCCESS) {
         printf("Error while computing quote!\n");
-        exit(-1);
+        return ;
       } 
       
       /** SEND DATA TO THE REMOTE ATTESTOR */
       fprintf(stdout, "Writing...\n");
       sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
 
-      
       Esys_Finalize(&esys_context);
       Tss2_TctiLdr_Finalize (&tcti_context);
+
+      pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+      if(tpa_status == 1){ // stop
+        fprintf(stdout, "TPA Stopped\n");
+        pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+        goto end;
+      }
+      pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     }
   }
 
-  return 0;
+end:
+  free(TpaData.ak_digest_blob.buffer);
+  for(i = 0; i < TpaData.ima_log_blob.size; i++)
+    free(TpaData.ima_log_blob.logEntry[i].template_data);
+  return ;
 }
 
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub) {

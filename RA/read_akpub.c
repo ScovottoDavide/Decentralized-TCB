@@ -53,15 +53,22 @@ int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *d
 }
 
 // For now 1 node, 1 channel, 1 index!
-bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number) {
+int read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex) {
     unsigned char expected_message[DATA_SIZE], *akPub = NULL, *digest = NULL;
     uint32_t expected_size = DATA_SIZE;
     char filename[FILENAME_LEN+FILE_PEM_LEN] = {0}, base_url[16] = "/etc/tc/TPA_AKs/", *tmp;
     base_url[16] = '\0';
 
-    while(ch_read_ak->recv_msg == 0)
+    while(ch_read_ak->recv_msg == 0){
         WAM_read(ch_read_ak, expected_message, &expected_size);
-    
+        pthread_mutex_lock(&mutex); // Lock a mutex for heartBeat_Status
+        if(*verifier_status == 1){
+            pthread_mutex_unlock(&mutex); // Lock a mutex for heartBeat_Status
+            return -2;
+        }
+        pthread_mutex_unlock(&mutex); // Lock a mutex for heartBeat_Status
+    }
+
     akPub = malloc((ch_read_ak->recv_bytes + 1) * sizeof(unsigned char));
     memcpy(akPub, expected_message, ch_read_ak->recv_bytes);
     akPub[ch_read_ak->recv_bytes] = '\0';
@@ -80,7 +87,7 @@ bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *a
     digest = malloc((SHA256_DIGEST_LENGTH + 1)*sizeof(unsigned char));
     int md_len = computeDigestEVP(akPub, "sha256", digest);
     if(md_len <= 0)
-        return false;
+        return -1;
     digest[SHA256_DIGEST_LENGTH] = '\0';
     
     // save data in the struct
@@ -88,7 +95,6 @@ bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *a
     memcpy(ak_table[node_number].ak_md, digest, SHA256_DIGEST_LENGTH * sizeof(unsigned char));
     strncpy(ak_table[node_number].path_name, full_path, sizeof  base_url + sizeof filename);
     ak_table[node_number].path_name[sizeof  base_url + sizeof filename] = '\0';
-
 
     // save aks to file  
     ak_file = fopen(full_path, "w");
@@ -99,4 +105,6 @@ bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *a
     free(digest);
     free(full_path);
     free(tmp);
+
+    return 0;
 }

@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
+#include <pthread.h>
 #include "/home/pi/WAM/WAM.h"
 
 #define FILENAME_LEN 10
@@ -21,4 +22,4 @@ typedef struct {
 void cleanUpFolder(char *path);
 char* rand_str(size_t length);
 int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest);
-bool read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number);
+int read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex);
