@@ -243,12 +243,11 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
 }
 
 bool verify_PCR10_whitelist(unsigned char *pcr10_sha1, unsigned char *pcr10_sha256, IMA_LOG_BLOB ima_log_blob, VERIFICATION_RESPONSE *ver_response, WHITELIST_TABLE whitelist_table) {
-  struct event template;
   int i;
 
   for (i = 0; i < ima_log_blob.size; i++) {
     if (ima_log_blob.logEntry[i].header.name_len > TCG_EVENT_NAME_LEN_MAX) {
-      fprintf(stdout, "%d ERROR: event name too long!\n", template.header.name_len);
+      fprintf(stdout, "%d ERROR: event name too long!\n", ima_log_blob.logEntry[i].header.name_len);
       return false;
     }
     if (read_template_data(ima_log_blob.logEntry[i], whitelist_table.white_entries, whitelist_table.number_of_entries, pcr10_sha256, pcr10_sha1, ver_response) == -1) {

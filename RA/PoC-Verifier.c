@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <openssl/rand.h>
+#include <pthread.h>
 #include "whitelist_verify.h"
 #include "/home/pi/WAM/WAM.h"
 
@@ -19,7 +20,55 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
 
+typedef struct {
+  const char *index_file_path_name;
+  int nodes_number;
+}ARGS;
+void menu(void *in);
+void PoC_Verifier(void *input);
+
+volatile int verifier_status = 0; // 0 -> do not stop; 1 --> stop the process
+pthread_mutex_t menuLock;
+
+
 int main(int argc, char const *argv[]) {
+  ARGS *args = malloc(sizeof(ARGS)); 
+  pthread_t th_verifier, th_menu;
+
+  if(argc != 3){
+    fprintf(stdout, "Please specify the file path and the number of nodes\n");
+    return -1;
+  }    
+  if(atoi(argv[2]) < 0 || !legal_int(argv[2])){
+    fprintf(stdout, "Entered parameter is NaN or it has to be greater than 0\n");
+    return -1;
+  }
+  args->index_file_path_name = argv[1];
+  args->nodes_number = atoi(argv[2]);
+
+  pthread_create(&th_verifier, NULL, (void *)&PoC_Verifier, (void *) args);
+  pthread_create(&th_menu, NULL, (void *)&menu, NULL);
+
+  pthread_join(th_verifier, NULL);
+  pthread_join(th_menu, NULL);
+  return 0;
+}
+
+void menu(void *in) {
+    int input;
+    fprintf(stdout, "Press [1] --> Stop Heartbeat\n");
+    scanf("%d%*c", &input);
+    if(input == 1){
+        pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+        fprintf(stdout, "Waiting to process the last data. Gracefully stopping the Verifier!\n");
+        verifier_status = 1;
+        pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+    }
+}
+
+void PoC_Verifier(void *input){
+  int nodes_number = ((ARGS *)input)->nodes_number;
+  const char *file_index_path_name = ((ARGS *)input)->index_file_path_name;
   int i, j, *verified_nodes;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
@@ -36,16 +85,6 @@ int main(int argc, char const *argv[]) {
   uint16_t *previous_msg_num;
 
   unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL;
-
-  if(argc != 3){
-    fprintf(stdout, "Please specify the file path and the number of nodes\n");
-    return -1;
-  }    
-  if(atoi(argv[2]) < 0 || !legal_int(argv[2])){
-    fprintf(stdout, "Entered parameter is NaN or it has to be greater than 0\n");
-    return -1;
-  }
-  int nodes_number = atoi(argv[2]);
 
   TpaData = malloc(nodes_number * sizeof(TO_SEND));
   ver_response = malloc(nodes_number * sizeof(VERIFICATION_RESPONSE));
@@ -77,10 +116,10 @@ int main(int argc, char const *argv[]) {
 							 .port = 14265,
 							 .tls = false};
 
-  index_file = fopen(argv[1], "r");
+  index_file = fopen(file_index_path_name, "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open index file\n");
-    return -1;
+    return ;
   }
   get_Index_from_file(index_file, &heartBeat_index, &write_response_index, read_indexes, read_indexes_AkPub, read_indexes_whitelist, nodes_number);
   fclose(index_file);
@@ -138,6 +177,9 @@ int main(int argc, char const *argv[]) {
   // Read the whitelist from the tangle! So every TPA has to upload its whitelist before the process starts
 
   fprintf(stdout, "\n Reading...\n");
+  read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
+  for(i = 0; i < nodes_number; i++)
+    read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
@@ -145,9 +187,7 @@ int main(int argc, char const *argv[]) {
       expected_size+=32;
       have_to_read = 1;
 
-      read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
       for(i = 0; i < nodes_number; i++){
-        read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
         ch_read_attest[i].recv_bytes = 0;
         ch_read_attest[i].recv_msg = 0;
         offset[i] = 0;
@@ -169,9 +209,8 @@ int main(int argc, char const *argv[]) {
           else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
             parseTPAdata(TpaData, read_attest_message[i], i);
             fprintf(stdout, "\tNew quote from [%d bytes]: ", ch_read_attest[i].recv_bytes); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
-            free(read_attest_message[i]);
             have_to_read += 1;
-            
+
             // Get also pcr10 since we're reading pcrs here
             fprintf(stdout, "Calculating PCR9s ...\n");
             if (!PCR9_calculation(pcr9_sha1, pcr9_sha256, ak_table, TpaData[i], nodes_number)) {
@@ -212,52 +251,72 @@ int main(int argc, char const *argv[]) {
 
             verified_nodes[i] = 1;
               
-            /*fprintf(stdout, "freeing TpaData %d\n", i);
-            free(TpaData[i].sig_blob.buffer); free(TpaData[i].message_blob.buffer); free(TpaData[i].ak_digest_blob.buffer);
-            for(j = 0; i < TpaData[i].ima_log_blob.size; j++){
-              fprintf(stdout, "%s ", TpaData[i].ima_log_blob.logEntry[j].template_data);
+            for(j = 0; j < TpaData[i].ima_log_blob.size; j++){
               free(TpaData[i].ima_log_blob.logEntry[j].template_data);
             }
-            fprintf(stdout, "done2\n");
             free(TpaData[i].ima_log_blob.logEntry);
-            fprintf(stdout, "done\n");*/
-            /*for(j = 0; j < ver_response.number_white_entries; j++)
-              free(ver_response.untrusted_entries[j].untrusted_path_name);
-            free(ver_response.untrusted_entries);*/
           }
         }
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
-          fprintf(stdout, "Sending verification response... ");
+          fprintf(stdout, "Sending verification response... \n");
           sendRAresponse(&ch_write_response, ver_response, nodes_number);
           have_to_read = 0;
-          free(read_attest_message);
           for(j = 0; j < nodes_number; j++)
             verified_nodes[j] = 0;
         }
       }
       if((i + 1) == nodes_number) i = 0;
       else i+=1;
+      pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+      if(verifier_status == 1){ // stop
+        fprintf(stdout, "Verifier Stopped\n");
+        pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+        goto end;
+      }
+      pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     }
+    pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+    if(verifier_status == 1){ // stop
+      fprintf(stdout, "Verifier Stopped\n");
+      pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+      goto end;
+    }
+    pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
   }
   
 end:
-  for(i = 0; i < nodes_number && verified_nodes[i] == 0; i++)
-    free(read_attest_message[i]);
+  for(i = 0; i < nodes_number; i++)
+      free(read_attest_message[i]);
+  if(read_attest_message != NULL) free(read_attest_message);
   for(i = 0; i < nodes_number; i++){
     free(pcrs_mem[i].pcr10_sha1);
     free(pcrs_mem[i].pcr10_sha256);
   }
   free(pcrs_mem);
-  free(read_attest_message);
   free(pcr9_sha1); free(pcr9_sha256);
-  free(ch_read_attest); free(ch_read_ak); 
-  free(read_indexes); free(read_indexes_AkPub);
-  free(ak_table); free(ak_files);
+  free(ch_read_attest); free(ch_read_ak); free(ch_read_whitelist);
+  free(read_indexes); free(read_indexes_AkPub); free(read_indexes_whitelist);
+  free(ak_files);
   free(offset); free(previous_msg_num);
-  free(TpaData);
   free(verified_nodes);
-  return 0;
+  for(i = 0; i < nodes_number; i++){
+    free(TpaData[i].sig_blob.buffer);
+    free(TpaData[i].message_blob.buffer);
+    free(TpaData[i].ak_digest_blob.buffer);
+    free(ak_table[i].path_name);
+    for(j = 0; j < nodes_number; j++){
+      free(ver_response[i].untrusted_entries[j].untrusted_path_name);
+      free(whitelist_table[i].white_entries[j].path);
+    }
+    free(whitelist_table[i].white_entries);
+    free(ver_response[i].untrusted_entries);
+  }
+  free(ver_response);
+  free(whitelist_table);
+  free(ak_table); 
+  free(TpaData);
+  return ;
 }
 
 bool legal_int(const char *str) {
@@ -313,7 +372,7 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   }
   
   free(data);
-  cJSON_free(json);
+  cJSON_Delete(json);
 }
 
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number) {
@@ -506,10 +565,10 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
   if (md_len_sha256 <= 0)
     return false;
 
-  //free(pcr_sha1);
-  //free(digest_sha1);
-  //free(pcr_sha256);
-  //free(digest_sha256);
+  free(pcr_sha1);
+  free(digest_sha1);
+  free(pcr_sha256);
+  free(digest_sha256);
   // do not free ak_path because it points to the actual path, otherwise it will free the actual data and the so it will be lost
   return true;
 }

@@ -18,7 +18,7 @@ LDFLAGS+=\
 
 LDFLAGS += \
 -L/home/pi/iota.c/build/lib/ \
--liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium
+-liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium -lpthread
 
 # define the executable file
 MAIN = Verifier
