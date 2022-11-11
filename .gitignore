@@ -4,10 +4,14 @@
 !*.py
 !*.pdf
 !*.md
+!*.sh
 !TPA
 !RA
 !IMA
 !Whitelisting_Utils
+!HeartBeat-Utils
+!HeartBeat-Utils/heartbeat_WAM
+!HeartBeat-Utils/generateIndexesWAM
 !Literature
 !Makefile
 !.gitignore
