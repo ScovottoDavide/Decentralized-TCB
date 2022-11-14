@@ -296,10 +296,11 @@ end:
     free(TpaData[i].message_blob.buffer);
     free(TpaData[i].ak_digest_blob.buffer);
     free(ak_table[i].path_name);
-    for(j = 0; j < nodes_number; j++){
-      free(ver_response[i].untrusted_entries[j].untrusted_path_name);
+    for(j = 0; j < ver_response[i].number_white_entries; j++)
+      if(ver_response[i].untrusted_entries[j].untrusted_path_name != NULL) 
+        free(ver_response[i].untrusted_entries[j].untrusted_path_name);
+    for(j = 0; j < whitelist_table[i].number_of_entries; j++)
       free(whitelist_table[i].white_entries[j].path);
-    }
     free(whitelist_table[i].white_entries);
     free(ver_response[i].untrusted_entries);
   }
