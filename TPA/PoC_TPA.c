@@ -6,13 +6,14 @@
 #include <pthread.h>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tctildr.h>
+#include <time.h>
 #include "tpm2_createek.h"
 #include "tpm2_createak.h"
 #include "tpm2_quote.h"
 #include "PCR9Extend.h"
 #include "/home/pi/WAM/WAM.h"
 //#include "../IMA/ima_read_writeOut_binary.h"
-
+#define BILLION  1000000000L;
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
 bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub);
 int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
@@ -24,6 +25,24 @@ void menu(void *in);
 
 volatile int tpa_status = 0; // 0 -> do not stop; 1 --> stop the process
 pthread_mutex_t menuLock;
+
+enum { NS_PER_SECOND = 1000000000 };
+
+void sub_timespec(struct timespec t1, struct timespec t2, struct timespec *td)
+{
+    td->tv_nsec = t2.tv_nsec - t1.tv_nsec;
+    td->tv_sec  = t2.tv_sec - t1.tv_sec;
+    if (td->tv_sec > 0 && td->tv_nsec < 0)
+    {
+        td->tv_nsec += NS_PER_SECOND;
+        td->tv_sec--;
+    }
+    else if (td->tv_sec < 0 && td->tv_nsec > 0)
+    {
+        td->tv_nsec -= NS_PER_SECOND;
+        td->tv_sec++;
+    }
+}
 
 int main(int argc, char *argv[]) {
   pthread_t th_tpa, th_menu;
@@ -55,6 +74,8 @@ void menu(void *in) {
 
 void PoC_TPA(void *input) {
   char *file_index_path_name = ((char *)input);
+  struct timespec start, stop, delta;
+  double accum;
 
   // TPM
   TSS2_RC tss_r;
@@ -76,7 +97,7 @@ void PoC_TPA(void *input) {
   FILE *index_file;
 
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
-							 .port = 14265,
+							 .port = 14000,
 							 .tls = false};
 
   index_file = fopen(file_index_path_name, "r");
@@ -161,7 +182,19 @@ void PoC_TPA(void *input) {
       
       /** SEND DATA TO THE REMOTE ATTESTOR */
       fprintf(stdout, "Writing...\n");
+      if( clock_gettime( CLOCK_REALTIME, &start) == -1 ) {
+        perror( "clock gettime" );
+        goto end;
+      }
       sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
+
+      if( clock_gettime( CLOCK_REALTIME, &stop) == -1 ) {
+        perror( "clock gettime" );
+        goto end;
+      }
+
+      sub_timespec(start, stop, &delta);
+      printf("TIME: %d.%.9ld\n", (int)delta.tv_sec, delta.tv_nsec);
 
       Esys_Finalize(&esys_context);
       Tss2_TctiLdr_Finalize (&tcti_context);
