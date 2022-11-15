@@ -300,7 +300,8 @@ end:
       if(ver_response[i].untrusted_entries[j].untrusted_path_name != NULL) 
         free(ver_response[i].untrusted_entries[j].untrusted_path_name);
     for(j = 0; j < whitelist_table[i].number_of_entries; j++)
-      free(whitelist_table[i].white_entries[j].path);
+      if(whitelist_table[i].white_entries[j].path != NULL)
+        free(whitelist_table[i].white_entries[j].path);
     free(whitelist_table[i].white_entries);
     free(ver_response[i].untrusted_entries);
   }
