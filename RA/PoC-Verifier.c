@@ -27,6 +27,7 @@ void menu(void *in);
 void PoC_Verifier(void *input);
 
 volatile int verifier_status = 0; // 0 -> do not stop; 1 --> stop the process
+volatile int early_exit = 0;
 pthread_mutex_t menuLock;
 
 int main(int argc, char const *argv[]) {
@@ -48,6 +49,8 @@ int main(int argc, char const *argv[]) {
   pthread_create(&th_menu, NULL, (void *)&menu, NULL);
 
   pthread_join(th_verifier, NULL);
+  if(early_exit)
+    pthread_cancel(th_menu);
   pthread_join(th_menu, NULL);
   return 0;
 }
@@ -55,7 +58,7 @@ int main(int argc, char const *argv[]) {
 void menu(void *in) {
     int input;
     fprintf(stdout, "Press [1] --> Stop Verifier\n");
-    scanf("%d%*c", &input);
+    fscanf(stdin, "%d", &input);
     if(input == 1){
         pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         fprintf(stdout, "Waiting to process the last data. Gracefully stopping the Verifier!\n");
@@ -159,7 +162,7 @@ void PoC_Verifier(void *input){
 
   for(i = 0; i < nodes_number; i++){
     if(!read_and_save_whitelist(&ch_read_whitelist[i], whitelist_table, i))
-      goto end;
+      goto early_end;
   }
   fprintf(stdout, "Whitelist map constructed\n");
 
@@ -319,6 +322,12 @@ early_end:
   free(ak_files);
   free(offset); free(previous_msg_num);
   free(verified_nodes);
+  pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+  if(verifier_status == 0){ // stop
+    fprintf(stdout, "Verifier Stopped\n");
+    early_exit = 1;
+  }
+  pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
   return ;
 }
 
