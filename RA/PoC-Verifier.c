@@ -28,7 +28,7 @@ void PoC_Verifier(void *input);
 
 volatile int verifier_status = 0; // 0 -> do not stop; 1 --> stop the process
 volatile int early_exit = 0;
-pthread_mutex_t menuLock;
+pthread_mutex_t menuLock, earlyLock;
 
 int main(int argc, char const *argv[]) {
   ARGS *args = malloc(sizeof(ARGS)); 
@@ -49,8 +49,12 @@ int main(int argc, char const *argv[]) {
   pthread_create(&th_menu, NULL, (void *)&menu, NULL);
 
   pthread_join(th_verifier, NULL);
-  if(early_exit)
+  pthread_mutex_lock(&earlyLock);
+  if(early_exit){
+    pthread_mutex_unlock(&earlyLock);
     pthread_cancel(th_menu);
+  }
+  pthread_mutex_unlock(&earlyLock);
   pthread_join(th_menu, NULL);
   return 0;
 }
@@ -325,7 +329,9 @@ early_end:
   pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
   if(verifier_status == 0){ // stop
     fprintf(stdout, "Verifier Stopped\n");
+    pthread_mutex_lock(&earlyLock);
     early_exit = 1;
+    pthread_mutex_unlock(&earlyLock);
   }
   pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
   return ;
