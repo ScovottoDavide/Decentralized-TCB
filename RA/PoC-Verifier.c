@@ -252,7 +252,7 @@ void PoC_Verifier(void *input){
 
             fprintf(stdout, "Verification response built for: "); hex_print(ver_response[i].ak_digest, SHA256_DIGEST_LENGTH);
             for(j = 0; j < ver_response[i].number_white_entries; j++)
-              if(ver_response->untrusted_entries[j].name_len != 0)
+              if(ver_response[i].untrusted_entries[j].name_len != 0)
                 fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
 
             verified_nodes[i] = 1;
@@ -474,10 +474,12 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
     memcpy(response_buff + acc, &ver_response[i].is_quote_successful, sizeof(uint8_t));
     acc += sizeof(uint8_t);
     for(j = 0; j < ver_response[i].number_white_entries; j++){
-      memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].name_len, sizeof(uint16_t));
-      acc += sizeof(uint16_t);
-      memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].untrusted_path_name, ver_response[i].untrusted_entries[j].name_len * sizeof(char));
-      acc += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
+      if(ver_response[i].untrusted_entries[j].name_len > 0 ){
+        memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].name_len, sizeof(uint16_t));
+        acc += sizeof(uint16_t);
+        memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].untrusted_path_name, ver_response[i].untrusted_entries[j].name_len * sizeof(char));
+        acc += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
+      }
     }
   }
   memcpy(response_buff + acc, last, sizeof last);
