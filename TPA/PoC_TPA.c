@@ -97,7 +97,7 @@ void PoC_TPA(void *input) {
   FILE *index_file;
 
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
-							 .port = 14265,
+							 .port = 14000,
 							 .tls = false};
 
   index_file = fopen(file_index_path_name, "r");
