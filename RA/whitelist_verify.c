@@ -211,20 +211,22 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
         ver_responseIndex = getIndexFromVerResponse(ver_response, white_entries[entry_index].path, white_entries[entry_index].path_len);
         if (strncmp(white_entries[entry_index].digest, string_digest, SHA256_DIGEST_LENGTH*2)) {
           //fprintf(stdout, "State Untrusted: ");
+          //fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
           if(ver_response->number_white_entries + 1 <= white_entries_size) {
             if(ver_responseIndex < 0){  // add new entry
-              fprintf(stdout, "Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
               ver_response->untrusted_entries[ver_response->number_white_entries].name_len = (uint16_t)field_path_len;
               ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name = malloc(ver_response->untrusted_entries[ver_response->number_white_entries].name_len + 1 * sizeof(char));
               strncpy(ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name, white_entries[entry_index].path, field_path_len);
               ver_response->untrusted_entries[ver_response->number_white_entries].untrusted_path_name[field_path_len] = '\0';
               ver_response->number_white_entries += 1;
-            } 
+            } else {
+              ver_response->untrusted_entries[ver_responseIndex].name_len = (uint16_t)field_path_len;
+            }
           }
         }
         else {
+          //fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
           if(ver_responseIndex >= 0){ // means that was previously untrusted --> remove it from the response
-            fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
             ver_response->untrusted_entries[ver_responseIndex].name_len = 0;
             //free(ver_response->untrusted_entries[ver_responseIndex].untrusted_path_name);
             //ver_response->number_white_entries -= 1;
