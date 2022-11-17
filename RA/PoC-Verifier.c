@@ -249,7 +249,8 @@ void PoC_Verifier(void *input){
 
             fprintf(stdout, "Verification response built for: "); hex_print(ver_response[i].ak_digest, SHA256_DIGEST_LENGTH);
             for(j = 0; j < ver_response[i].number_white_entries; j++)
-              fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
+              if(ver_response->untrusted_entries[j].name_len != 0)
+                fprintf(stdout, "path: %s\n", ver_response[i].untrusted_entries[j].untrusted_path_name);
 
             verified_nodes[i] = 1;
               
@@ -297,7 +298,7 @@ end:
     free(TpaData[i].ak_digest_blob.buffer);
     free(ak_table[i].path_name);
     for(j = 0; j < ver_response[i].number_white_entries; j++)
-      if(ver_response[i].untrusted_entries[j].untrusted_path_name != NULL) 
+      if(ver_response[i].untrusted_entries[j].name_len > 0) 
         free(ver_response[i].untrusted_entries[j].untrusted_path_name);
     for(j = 0; j < whitelist_table[i].number_of_entries; j++)
       if(whitelist_table[i].white_entries[j].path != NULL)
