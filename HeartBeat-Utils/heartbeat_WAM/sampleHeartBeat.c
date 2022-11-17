@@ -70,7 +70,7 @@ void PoC_heartbeat(void *nodes_number_p) {
     WAM_channel ch_send, *ch_read_responses;
 
     IOTA_Endpoint privatenet = {.hostname = "130.192.86.15",
-							 .port = 14000,
+							 .port = 14265,
 							 .tls = false};
 
     // read the pre-allocated indexes from the file

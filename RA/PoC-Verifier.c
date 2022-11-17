@@ -111,7 +111,7 @@ void PoC_Verifier(void *input){
   pcr9_sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
 
   IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
-							 .port = 14000,
+							 .port = 14265,
 							 .tls = false};
 
   index_file = fopen(file_index_path_name, "r");
