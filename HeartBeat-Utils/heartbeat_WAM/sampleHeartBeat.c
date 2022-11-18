@@ -14,7 +14,8 @@ bool legal_int(const char *str);
 int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
 
 volatile int heartBeat_status = 0; // 0 -> do not stop; 1 --> stop the process
-pthread_mutex_t menuLock;
+volatile int early_exit = 0;
+pthread_mutex_t menuLock, earlyLock;
 
 int main(int argc, char *argv[]) {
     int nodes_number;
@@ -32,6 +33,11 @@ int main(int argc, char *argv[]) {
     pthread_create(&th_menu, NULL, (void *)&menu, NULL);
 
     pthread_join(th_heartbeat, NULL);
+    pthread_mutex_lock(&earlyLock);
+    if(early_exit){
+        pthread_mutex_unlock(&earlyLock);
+        pthread_cancel(th_menu);
+    }
     pthread_join(th_menu, NULL);
     return 0;
 }
@@ -93,6 +99,10 @@ void PoC_heartbeat(void *nodes_number_p) {
 
     // read the pre-allocated indexes from the file
     index_file = fopen("heartbeat_write.json", "r");
+    if(index_file == NULL) {
+        fprintf(stdout, "Heartbeat Index file missing!\n");
+        goto early_end;
+    }
         //get len of file
     fseek(index_file, 0, SEEK_END);
     len_file = ftell(index_file);
@@ -202,5 +212,14 @@ end:
     if(ch_read_responses != NULL) free(ch_read_responses);
     if(read_response_indexes!= NULL) free(read_response_indexes);
     if(json != NULL) cJSON_Delete(json);
+early_end:
+    pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+    if(heartBeat_status == 0){ // stop
+        fprintf(stdout, "Stopping...\n");
+        pthread_mutex_lock(&earlyLock); // Lock a mutex for heartBeat_Status
+        early_exit = 1;
+        pthread_mutex_unlock(&earlyLock); // Unlock a mutex for heartBeat_Status
+    }
+    pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     return ;
 }
