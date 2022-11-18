@@ -20,6 +20,7 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub);
 
+int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
 void PoC_TPA(void *input);
 void menu(void *in);
 
@@ -28,8 +29,7 @@ pthread_mutex_t menuLock;
 
 enum { NS_PER_SECOND = 1000000000 };
 
-void sub_timespec(struct timespec t1, struct timespec t2, struct timespec *td)
-{
+void sub_timespec(struct timespec t1, struct timespec t2, struct timespec *td) {
     td->tv_nsec = t2.tv_nsec - t1.tv_nsec;
     td->tv_sec  = t2.tv_sec - t1.tv_sec;
     if (td->tv_sec > 0 && td->tv_nsec < 0)
@@ -60,16 +60,34 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len) {
+    // Clear buffer to ensure the string will be null terminated
+    memset(buffer, 0, buffer_len);
+
+    int c;
+    int bytes_read = 0;
+    // Read one char at a time until EOF or newline
+    while (EOF != (c = fgetc(stdin)) && '\n' != c) {
+        // Only add to buffer if within size limit
+        if (bytes_read < buffer_len - 1) {
+            buffer[bytes_read++] = (char)c;
+        }
+    }
+    return bytes_read;
+}
+
 void menu(void *in) {
-    int input;
-    fprintf(stdout, "Press [1] --> Stop TPA\n");
-    scanf("%d%*c", &input);
-    if(input == 1){
+    char input[10];
+    do{
+      fprintf(stdout, "Press [1] --> Stop TPA\n");
+      my_gets_avoid_bufferoverflow(input, 10);
+      if(atoi(input) == 1){
         pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         fprintf(stdout, "Waiting to process the last data. Gracefully stopping the TPA!\n");
         tpa_status = 1;
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-    }
+      }
+    }while(atoi(input) != 1);
 }
 
 void PoC_TPA(void *input) {

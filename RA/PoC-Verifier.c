@@ -23,6 +23,7 @@ typedef struct {
   const char *index_file_path_name;
   int nodes_number;
 }ARGS;
+int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
 void menu(void *in);
 void PoC_Verifier(void *input);
 
@@ -59,16 +60,34 @@ int main(int argc, char const *argv[]) {
   return 0;
 }
 
+int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len) {
+    // Clear buffer to ensure the string will be null terminated
+    memset(buffer, 0, buffer_len);
+
+    int c;
+    int bytes_read = 0;
+    // Read one char at a time until EOF or newline
+    while (EOF != (c = fgetc(stdin)) && '\n' != c) {
+        // Only add to buffer if within size limit
+        if (bytes_read < buffer_len - 1) {
+            buffer[bytes_read++] = (char)c;
+        }
+    }
+    return bytes_read;
+}
+
 void menu(void *in) {
-    int input;
-    fprintf(stdout, "Press [1] --> Stop Verifier\n");
-    fscanf(stdin, "%d", &input);
-    if(input == 1){
+    char input[10];
+    do {
+      fprintf(stdout, "Press [1] --> Stop Verifier\n");
+      my_gets_avoid_bufferoverflow(input, 10);
+      if(atoi(input) == 1){
         pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         fprintf(stdout, "Waiting to process the last data. Gracefully stopping the Verifier!\n");
         verifier_status = 1;
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-    }
+      }
+    }while(atoi(input) != 1);
 }
 
 void PoC_Verifier(void *input){
