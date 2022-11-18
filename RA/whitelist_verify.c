@@ -228,7 +228,7 @@ int read_template_data(struct event template, const struct whitelist_entry *whit
           //fprintf(stdout, "OKKK Path: %s IMA_LOG: %s Whitelist: %s\n", white_entries[entry_index].path, string_digest, white_entries[entry_index].digest);
           if(ver_responseIndex >= 0){ // means that was previously untrusted --> remove it from the response
             ver_response->untrusted_entries[ver_responseIndex].name_len = 0;
-            //free(ver_response->untrusted_entries[ver_responseIndex].untrusted_path_name);
+            free(ver_response->untrusted_entries[ver_responseIndex].untrusted_path_name);
             //ver_response->number_white_entries -= 1;
           }
         }
