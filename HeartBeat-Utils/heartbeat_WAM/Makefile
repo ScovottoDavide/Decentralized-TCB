@@ -1,6 +1,10 @@
 CC = gcc
 CFLAGS = -Wall -g
 
+ifndef $(WAM_DIR)
+WAM_DIR = .
+endif
+
 SOURCE_1 = sampleHeartBeat.c
 SOURCE_2 = ${WAM_DIR}/WAM/WAM.c 
 SOURCE_3 = ${WAM_DIR}/WAM/wam-wrapper.c

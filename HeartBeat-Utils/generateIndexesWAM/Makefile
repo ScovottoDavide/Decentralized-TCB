@@ -1,5 +1,9 @@
 CC = gcc
 
+ifndef $(WAM_DIR)
+WAM_DIR = .
+endif
+
 SOURCE_1 = generateIndexes.c
 SOURCE_2 = ${WAM_DIR}/WAM/WAM.c 
 SOURCE_3 = ${WAM_DIR}/WAM/wam-wrapper.c
