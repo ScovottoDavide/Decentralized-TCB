@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <openssl/rand.h>
-#include "/home/privateadm/WAM/WAM.h"
+#include "WAM/WAM.h"
 
 #define NONCE_LEN 32
 
@@ -33,7 +33,6 @@ int main(int argc, char *argv[]) {
 
     pthread_join(th_heartbeat, NULL);
     pthread_join(th_menu, NULL);
-    //PoC_heartbeat(nodes_number);
     return 0;
 }
 
@@ -64,7 +63,7 @@ void menu(void *in) {
     char input[10];
     do{
         fprintf(stdout, "Press [1] --> Stop Heartbeat\n");
-        my_gets_avoid_bufferoverflow(input, 10);
+        my_gets_avoid_bufferoverflow(input, sizeof(input));
         if(atoi(input) == 1){
             pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
             heartBeat_status = 1;
@@ -132,7 +131,7 @@ void PoC_heartbeat(void *nodes_number_p) {
 
     read_response_messages = (uint8_t**) malloc(nodes_number * sizeof(uint8_t *));
     for(i = 0; i<nodes_number; i++)
-        read_response_messages[i] = malloc(DATA_SIZE * 2 * sizeof(uint8_t));
+        read_response_messages[i] = (uint8_t *) malloc(DATA_SIZE * 2 * sizeof(uint8_t));
     responses_map = calloc(nodes_number, sizeof(int));
 
     while(1){
@@ -158,7 +157,7 @@ void PoC_heartbeat(void *nodes_number_p) {
         }
         i = 0;
         while(received_responses < nodes_number && !new_nonce_send){
-            if(responses_map[i] == 0){
+            if(responses_map[i] == 0 && i < nodes_number){
                 if(!WAM_read(&ch_read_responses[i], expected_response_messages, &expected_response_size)){
                     if(ch_read_responses[i].recv_msg != previous_msg_num[i]){
                         memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);

@@ -1,19 +1,19 @@
 CC = gcc
 
 SOURCE_1 = generateIndexes.c
-SOURCE_2 = /home/privateadm/WAM/WAM.c 
-SOURCE_3 = /home/privateadm/WAM/wam-wrapper.c
+SOURCE_2 = ${WAM_DIR}/WAM/WAM.c 
+SOURCE_3 = ${WAM_DIR}/WAM/wam-wrapper.c
 
 
 LDFLAGS+=\
--I/home/privateadm/iota.c/build/include/ \
--I/home/privateadm/iota.c/build/include/cjson/ \
--I/home/privateadm/iota.c/build/include/client/ \
--I/home/privateadm/iota.c/build/include/crypto/ \
--I/home/privateadm/iota.c/build/include/core/ \
+-I${WAM_DIR}/iota.c/build/include/ \
+-I${WAM_DIR}/iota.c/build/include/cjson/ \
+-I${WAM_DIR}/iota.c/build/include/client/ \
+-I${WAM_DIR}/iota.c/build/include/crypto/ \
+-I${WAM_DIR}/iota.c/build/include/core/ \
 
 LDFLAGS += \
--L/home/privateadm/iota.c/build/lib/ \
+-L${WAM_DIR}/iota.c/build/lib/ \
 -liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium 
 
 APP = WAM_generateIndexes
