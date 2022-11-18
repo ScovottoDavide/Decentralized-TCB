@@ -1,5 +1,5 @@
 #include <string.h>
-#include "/home/privateadm/WAM/WAM.h"
+#include "WAM/WAM.h"
 
 void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *indexes_TPA_AkPub, IOTA_Index *indexes_whitelist_TPA, IOTA_Index heartBeat_index, int number_of_indexes);
 

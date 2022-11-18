@@ -6,6 +6,7 @@ SOURCE_3 = ${WAM_DIR}/WAM/wam-wrapper.c
 
 
 LDFLAGS+=\
+-I${WAM_DIR} \
 -I${WAM_DIR}/iota.c/build/include/ \
 -I${WAM_DIR}/iota.c/build/include/cjson/ \
 -I${WAM_DIR}/iota.c/build/include/client/ \
