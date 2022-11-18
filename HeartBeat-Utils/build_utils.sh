@@ -13,17 +13,12 @@ else
    exit -1
 fi
 
-unset WAM_DIR
-export WAM_DIR=$1
-
 cd generateIndexesWAM
 echo "Building Index files generator"
-make &> /dev/null
+make WAM_DIR=$1 &> /dev/null
 cd ..
 
 cd heartbeat_WAM
 echo "Building heartbeat"
-make &> /dev/null
+make WAM_DIR=$1 &> /dev/null
 cd ..
-
-exit 1
