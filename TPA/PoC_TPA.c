@@ -11,9 +11,11 @@
 #include "tpm2_createak.h"
 #include "tpm2_quote.h"
 #include "PCR9Extend.h"
-#include "/home/pi/WAM/WAM.h"
+#include "WAM/WAM.h"
 //#include "../IMA/ima_read_writeOut_binary.h"
+
 #define BILLION  1000000000L;
+
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
 bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub);
 int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);

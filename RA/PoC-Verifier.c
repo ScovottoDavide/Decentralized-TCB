@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <openssl/rand.h>
 #include "whitelist_verify.h"
-#include "/home/pi/WAM/WAM.h"
+#include "WAM/WAM.h"
 
 bool legal_int(const char *str);
 void hex_print(uint8_t *raw_data, size_t raw_size);
