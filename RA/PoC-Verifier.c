@@ -511,12 +511,8 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
 
-  for(i = 0; i < bytes_to_send; i++)
-    fprintf(stdout, "%c", response_buff[i]);
-  fprintf(stdout, "\n");
-
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
+  fprintf(stdout, "DONE WRITING - Sent bytes = %d\n", bytes_to_send);
   
   free(response_buff);
 }
