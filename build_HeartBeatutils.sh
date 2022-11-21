@@ -13,12 +13,12 @@ else
    exit -1
 fi
 
-cd generateIndexesWAM
+cd HeartBeat-Utils/generateIndexesWAM
 echo "Building Index files generator"
-make WAM_DIR=$1 &> /dev/null
-cd ..
+make WAM_DIR=$1
+cd ../../
 
-cd heartbeat_WAM
+cd HeartBeat-Utils/heartbeat_WAM
 echo "Building heartbeat"
-make WAM_DIR=$1 &> /dev/null
-cd ..
+make WAM_DIR=$1
+cd ../../

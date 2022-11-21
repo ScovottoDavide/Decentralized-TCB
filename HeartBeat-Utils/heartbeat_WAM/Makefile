@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -g
 
 ifndef $(WAM_DIR)
 WAM_DIR = .
