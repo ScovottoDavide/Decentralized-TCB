@@ -478,8 +478,10 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   for(i = 0; i < nodes_number; i++){
     bytes_to_send += (sizeof(uint8_t)*SHA256_DIGEST_LENGTH) + sizeof(uint16_t) + sizeof(uint8_t); // tag + number of untrsuted entries + is_quote_successful
     for(j = 0; j < ver_response[i].number_white_entries; j++){
-      bytes_to_send += sizeof(uint16_t);
-      bytes_to_send += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
+      if(ver_response[i].untrusted_entries[j].name_len > 0 ){
+        bytes_to_send += sizeof(uint16_t);
+        bytes_to_send += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
+      }
     }
   }
   bytes_to_send += sizeof last;
@@ -509,8 +511,12 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
 
+  for(i = 0; i < bytes_to_send; i++)
+    fprintf(stdout, "%c", response_buff[i]);
+  fprintf(stdout, "\n");
+
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "DONE WRITING - Sent bytes = %d\n\n", bytes_to_send);
+  fprintf(stdout, "DONE WRITING - Sent bytes = %d, acc = %d\n", bytes_to_send, acc);
   
   free(response_buff);
 }
