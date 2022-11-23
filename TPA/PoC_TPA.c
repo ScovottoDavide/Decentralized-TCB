@@ -194,7 +194,7 @@ void PoC_TPA(void *input) {
         fprintf(stdout, "PCR9 sha256 extended\n");
       }
 
-      tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize);
+      tss_r = tpm2_quote(esys_context, &TpaData, 0);
       if (tss_r != TSS2_RC_SUCCESS) {
         printf("Error while computing quote!\n");
         return ;
