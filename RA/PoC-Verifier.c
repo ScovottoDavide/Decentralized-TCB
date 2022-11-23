@@ -265,7 +265,7 @@ void PoC_Verifier(void *input){
               goto end;
             }
 
-            if(TpaData[i].wholeLog = 1){ // If whole log is sent reset to 0 the pcrs otherwise checkquote will always fail after 1st round
+            if(TpaData[i].ima_log_blob.wholeLog = 1){ // If whole log is sent reset to 0 the pcrs otherwise checkquote will always fail after 1st round
               memset(pcrs_mem[pcrs_index].pcr10_sha256, 0, SHA256_DIGEST_LENGTH);
               memset(pcrs_mem[pcrs_index].pcr10_sha1, 0, SHA_DIGEST_LENGTH);
             }
