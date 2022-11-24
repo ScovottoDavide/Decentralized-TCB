@@ -14,6 +14,6 @@ else
 fi
 
 cd RA
-echo "Building Whitelisting utils..."
+echo "Building Verifier..."
 make WAM_DIR=$1
 cd ..

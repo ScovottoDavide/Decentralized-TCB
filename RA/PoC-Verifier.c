@@ -259,6 +259,10 @@ void PoC_Verifier(void *input){
             }
             memcpy(&ver_response[i].ak_digest, whitelist_table[white_index].ak_digest, SHA256_DIGEST_LENGTH);
             ver_response[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+            if(TpaData[i].ima_log_blob.wholeLog == 1){ // If whole log is sent reset to 0 the pcrs otherwise checkquote will always fail after 1st round
+              memset(pcrs_mem[pcrs_index].pcr10_sha256, 0, SHA256_DIGEST_LENGTH);
+              memset(pcrs_mem[pcrs_index].pcr10_sha1, 0, SHA_DIGEST_LENGTH);
+            }
             fprintf(stdout, "Calculating PCR10s and performing whitelist checks...\n");
             if(!verify_PCR10_whitelist(pcrs_mem[pcrs_index].pcr10_sha1, pcrs_mem[pcrs_index].pcr10_sha256, TpaData[i].ima_log_blob, &ver_response[i], whitelist_table[white_index])){
               fprintf(stdout, "Error while calculating pcr10s or verifying whitelist\n");
