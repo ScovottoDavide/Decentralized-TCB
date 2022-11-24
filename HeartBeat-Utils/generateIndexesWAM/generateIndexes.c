@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 
 void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx_TPA_AkPub, IOTA_Index *idx_TPA_whitelist, IOTA_Index heartBeat_index, int number_of_indexes) {
     FILE **index_files_TPA, **index_files_RA, *heartbeatWriteIndex_file;
-    int i, j;
+    int i, j, k = 0;
     cJSON *iota_index_json_TPA, *iota_index_json_RA, *heartbeat_json;
     char *out, priv_hex[ED_PRIVATE_KEY_BYTES*2 + 1], pub_hex[ED_PUBLIC_KEY_BYTES*2 +1], index_hex[INDEX_HEX_SIZE];
     char base_index_str[20] = "read_index_"; 
@@ -166,31 +166,34 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
                 base_pub_str[8] = (i + 1) + '0';
                 cJSON_AddItemToObject(heartbeat_json, base_pub_str, cJSON_CreateString(pub_hex));
                 cJSON_AddItemToObject(heartbeat_json, base_index_str, cJSON_CreateString(index_hex));
-            } 
-            // read indexes for RA to read quote
-            bin_2_hex(idx_TPA[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-            bin_2_hex(idx_TPA[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-            base_index_str[11] = (j + 1) + '0';
-            base_pub_str[8] = (j + 1) + '0';
-            cJSON_AddItemToObject(iota_index_json_RA, base_index_str, cJSON_CreateString(index_hex));
-            cJSON_AddItemToObject(iota_index_json_RA, base_pub_str, cJSON_CreateString(pub_hex));
+            } else {
+                // read indexes for RA to read quote
+                bin_2_hex(idx_TPA[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
+                bin_2_hex(idx_TPA[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
+                base_index_str[11] = (k + 1) + '0';
+                base_pub_str[8] = (k + 1) + '0';
+                cJSON_AddItemToObject(iota_index_json_RA, base_index_str, cJSON_CreateString(index_hex));
+                cJSON_AddItemToObject(iota_index_json_RA, base_pub_str, cJSON_CreateString(pub_hex));
 
-            //read indexes for RA to read AkPubs
-            bin_2_hex(idx_TPA_AkPub[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-            bin_2_hex(idx_TPA_AkPub[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-            base_index_str_akpub[11] = (j + 1) + '0';
-            base_pub_str_akpub[18] = (j + 1) + '0';
-            cJSON_AddItemToObject(iota_index_json_RA, base_index_str_akpub, cJSON_CreateString(index_hex));
-            cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_akpub, cJSON_CreateString(pub_hex));
+                //read indexes for RA to read AkPubs
+                bin_2_hex(idx_TPA_AkPub[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
+                bin_2_hex(idx_TPA_AkPub[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
+                base_index_str_akpub[11] = (k + 1) + '0';
+                base_pub_str_akpub[18] = (k + 1) + '0';
+                cJSON_AddItemToObject(iota_index_json_RA, base_index_str_akpub, cJSON_CreateString(index_hex));
+                cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_akpub, cJSON_CreateString(pub_hex));
 
-            //read indexes for RA to read whitelists
-            bin_2_hex(idx_TPA_whitelist[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-            bin_2_hex(idx_TPA_whitelist[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-            base_index_str_whitelist[15] = (j + 1) + '0';
-            base_pub_str_whitelist[22] = (j + 1) + '0';
-            cJSON_AddItemToObject(iota_index_json_RA, base_index_str_whitelist, cJSON_CreateString(index_hex));
-            cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_whitelist, cJSON_CreateString(pub_hex));
+                //read indexes for RA to read whitelists
+                bin_2_hex(idx_TPA_whitelist[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
+                bin_2_hex(idx_TPA_whitelist[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
+                base_index_str_whitelist[15] = (k + 1) + '0';
+                base_pub_str_whitelist[22] = (k + 1) + '0';
+                cJSON_AddItemToObject(iota_index_json_RA, base_index_str_whitelist, cJSON_CreateString(index_hex));
+                cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_whitelist, cJSON_CreateString(pub_hex));
+                k+=1;
+            }
         }
+        k=0;
         bin_2_hex(heartBeat_index.index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
         bin_2_hex(heartBeat_index.keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
         cJSON_AddItemToObject(iota_index_json_TPA, "heartbeat", cJSON_CreateString(index_hex));
