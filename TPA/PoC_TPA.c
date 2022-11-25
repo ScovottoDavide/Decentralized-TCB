@@ -17,7 +17,7 @@
 #define BILLION  1000000000L;
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
-bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub);
+bool loadAKdigest(TO_SEND *TpaData);
 int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub);
@@ -101,7 +101,7 @@ void PoC_TPA(void *input) {
   TSS2_RC tss_r;
   ESYS_CONTEXT *esys_context = NULL;
   TSS2_TCTI_CONTEXT *tcti_context = NULL;
-  int persistent_handles = 0, i, ak_md_wrote = 0;
+  int persistent_handles = 0, i;
   TO_SEND TpaData;
   ssize_t imaLogBytesSize = 0;
 
@@ -145,10 +145,6 @@ void PoC_TPA(void *input) {
       TpaData.nonce_blob.tag = (u_int8_t)0;
       TpaData.nonce_blob.size = sizeof nonce;
       memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
-
-      if(!ak_md_wrote)
-        if(sendAkPub_WAM(&TpaData, &ch_send_AkPub))
-          ak_md_wrote = 1;
       
       tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
       if (tss_r != TSS2_RC_SUCCESS) {
@@ -192,6 +188,11 @@ void PoC_TPA(void *input) {
         fprintf(stdout, "PCR9 sha1 extended\n");
         ExtendPCR9(esys_context, "sha256");
         fprintf(stdout, "PCR9 sha256 extended\n");
+      }
+
+      if(!loadAKdigest(&TpaData)) {
+        fprintf(stdout, "Could not load AK pub digest!\n");
+        return ;
       }
 
       tss_r = tpm2_quote(esys_context, &TpaData, 0);
@@ -265,7 +266,7 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   free(data);
 }
 
-bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub) {
+bool loadAKdigest(TO_SEND *TpaData) {
   unsigned char *akPub = NULL;
   unsigned char *digest = NULL;
 
@@ -286,11 +287,7 @@ bool sendAkPub_WAM(TO_SEND *TpaData, WAM_channel *ch_send_AkPub) {
   memcpy(TpaData->ak_digest_blob.buffer, digest, TpaData->ak_digest_blob.size);
   TpaData->ak_digest_blob.buffer[TpaData->ak_digest_blob.size] = '\0';
 
-  fprintf(stdout, "Writing AkPub...\n");
-  WAM_write(ch_send_AkPub, akPub, (uint32_t)strlen(akPub), false);
-
   free(digest);
-
   return true;
 }
 
