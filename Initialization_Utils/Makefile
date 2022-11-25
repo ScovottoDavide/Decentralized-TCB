@@ -6,7 +6,7 @@ WAM_DIR = .
 endif
 
 # define the C source files
-SRCS = whitelistUpload.c ${WAM_DIR}/WAM/WAM.c ../TPA/tpm2_createek.c ../TPA/tpm2_createak.c  ../TPA/createek_util.c ../TPA/createak_util.c\
+SRCS = whitelist_AK_Upload.c ${WAM_DIR}/WAM/WAM.c ../TPA/tpm2_createek.c ../TPA/tpm2_createak.c  ../TPA/createek_util.c ../TPA/createak_util.c\
 ../TPA/PEMconvertPub.c
 
 # define any library to link into executable:
@@ -27,7 +27,7 @@ LDFLAGS += \
 -liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium
 
 # define the executable file
-MAIN = uploadWhitelist
+MAIN = upload_Whitelist_AK
 
 .PHONY: all
 all:
