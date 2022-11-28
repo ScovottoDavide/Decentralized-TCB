@@ -161,6 +161,11 @@ void PoC_TPA(void *input) {
   IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
   FILE *index_file;
 
+  if(!initialize_tpm(ek_handle, ak_handle)) {
+    fprintf(stdout, "Could not initialize TPM conf\n");
+    return ;
+  }
+
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14000,
 							 .tls = false};
@@ -235,7 +240,7 @@ void PoC_TPA(void *input) {
       }
       sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
 
-      if( clock_gettime( CLOCK_REALTIME, &stop) == -1 ) {
+      if( clock_gettime(CLOCK_REALTIME, &stop) == -1 ) {
         perror( "clock gettime" );
         goto end;
       }
@@ -258,8 +263,9 @@ void PoC_TPA(void *input) {
 
 end:
   free(TpaData.ak_digest_blob.buffer);
-  for(i = 0; i < TpaData.ima_log_blob.size; i++)
-    free(TpaData.ima_log_blob.logEntry[i].template_data);
+  /*for(i = 0; i < TpaData.ima_log_blob.size; i++)
+    free(TpaData.ima_log_blob.logEntry[i].template_data);*/
+  free(TpaData.ima_log_blob.logEntry);
   return ;
 }
 
@@ -269,7 +275,7 @@ bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle) {
   TSS2_RC tss_r;
   ESYS_CONTEXT *esys_context = NULL;
   TSS2_TCTI_CONTEXT *tcti_context = NULL;
-  int persistent_handles = 0, i;
+  int persistent_handles = 0, n, i;
 
   tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
   if (tss_r != TSS2_RC_SUCCESS) {
@@ -284,13 +290,21 @@ bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle) {
 
   keys_conf = fopen("/etc/tc/keys.conf", "r");
   if(keys_conf == NULL) { // keys have not been created yet. Create EK and AK and save handle's index in file
-    fprintf(stdout, "init\n");
     goto generate_keys;
   }else { // file exists: check that handles are written in the file. If not regenerate keys
-    if(fscanf(keys_conf, "%s\n%s\n", ek_handle, ak_handle) != 2){
+    if(n = fread((char *)ek_handle, sizeof(char) * HANDLE_SIZE, 1, keys_conf) != 1){
       fprintf(stdout, "keys.conf file has been corrupted. Delete the file and re execute\n");
       goto error;
     }
+    if(n = fread((char *)ak_handle, sizeof(char) * HANDLE_SIZE, 1, keys_conf) != 1){
+      fprintf(stdout, "keys.conf file has been corrupted. Delete the file and re execute\n");
+      goto error;
+    }
+    fclose(keys_conf);
+    for(i = 0; i < HANDLE_SIZE; i++){
+      if(ek_handle[i] == '\n') ek_handle[i] = '\0';
+      if(ak_handle[i] == '\n') ak_handle[i] = '\0';
+    } 
     
     // Read the # of persistent handles and check that created/existing handles really exist
     persistent_handles = tpm2_getCap_handles_persistent(esys_context, ek_handle, ak_handle);
@@ -320,7 +334,9 @@ generate_keys:
     printf("\tError creating AK\n");
     goto error;
   }
-  fprintf(keys_conf, "%s\n%s\n", ek_handle, ak_handle);
+  //fprintf(keys_conf, "%s\n%s\n", ek_handle, ak_handle);
+  fwrite(ek_handle, HANDLE_SIZE*sizeof(char), 1, keys_conf);
+  fwrite(ak_handle, HANDLE_SIZE*sizeof(char), 1, keys_conf);
   fclose(keys_conf);
   goto exit;
 
@@ -480,7 +496,9 @@ bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist) {
 
   free(digest); 
   free(to_send_data);
-
+  for(i = 0; i < whitelistBlob.number_of_entries; i++)
+    free(whitelistBlob.white_entries[i].path);
+  free(whitelistBlob.white_entries);
   return true;
 }
 
@@ -603,7 +621,6 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
   fprintf(stdout, "DONE WRITING - Sent bytes = %d, ima = %d\n\n", bytes_to_send, *imaLogBytesSize);
 
   free(to_send_data);
-  //free(TpaData.ima_log_blob.logEntry);
 }
 
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context) {
