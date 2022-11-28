@@ -29,6 +29,7 @@ void hex_print(uint8_t *raw_data, size_t raw_size);
 
 int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
 void PoC_TPA(void *input);
+void PoC_TPA_init(void *input);
 void menu(void *in);
 
 volatile int tpa_status = 0; // 0 -> do not stop; 1 --> stop the process
@@ -52,18 +53,46 @@ void sub_timespec(struct timespec t1, struct timespec t2, struct timespec *td) {
 }
 
 int main(int argc, char *argv[]) {
-  pthread_t th_tpa, th_menu;
+  pthread_t th_tpa, th_menu, th_tpa_init;
 
-  if(argc != 2){
-    fprintf(stdout, "Please specify the file path of the 'indexation' file\n");
-    return -1;
-  }    
+  if(argc == 2) {
+    if(strcmp("--help", argv[1]) == 0){
+      fprintf(stdout, "Supported commands:\n");
+      fprintf(stdout, "1. init --> Initialize TPM configuration: sudo ./PoC_TPA [path where 'index' file is] init\n");
+      fprintf(stdout, "1. run --> Execute the Trusted Platform Agent: sudo ./PoC_TPA [path where 'index' file is] run\n");
+      goto exit;
+    }else {
+      fprintf(stdout, "For help --> ./PoC_TPA --help\n");
+      goto exit;
+    }
+  }
 
-  pthread_create(&th_menu, NULL, (void *)&PoC_TPA, (void *) argv[1]);
-  pthread_create(&th_menu, NULL, (void *)&menu, NULL);
+  if(argc == 3) {
+    if(strcmp("init", argv[2]) == 0){
+      pthread_create(&th_tpa_init, NULL, (void *)&PoC_TPA_init, NULL);    
+      pthread_join(th_tpa_init, NULL);
+      goto exit;
+    }
+    if(strcmp("run", argv[2]) == 0) {
+      pthread_create(&th_tpa, NULL, (void *)&PoC_TPA, (void *) argv[1]);
+      pthread_create(&th_menu, NULL, (void *)&menu, NULL);
 
-  pthread_join(th_tpa, NULL);
-  pthread_join(th_menu, NULL);
+      pthread_join(th_tpa, NULL);
+      pthread_join(th_menu, NULL);
+      goto exit;
+    }
+    else {
+      fprintf(stdout, "Unknown command!\n");
+      fprintf(stdout, "For help --> ./PoC_TPA --help\n");
+    }
+  }
+
+  if(argc > 3) {
+    fprintf(stdout, "Wrong usage!\n");
+    fprintf(stdout, "For help --> ./PoC_TPA --help\n");
+  }
+
+exit:
   return 0;
 }
 
@@ -97,6 +126,16 @@ void menu(void *in) {
     }while(atoi(input) != 1);
 }
 
+void PoC_TPA_init(void *input) {
+  uint16_t ek_handle[HANDLE_SIZE], ak_handle[HANDLE_SIZE];
+
+  if(!initialize_tpm(ek_handle, ak_handle)) {
+    fprintf(stdout, "Could not initialize TPM conf\n");
+    return ;
+  }
+  return ;
+}
+
 void PoC_TPA(void *input) {
   char *file_index_path_name = ((char *)input);
   struct timespec start, stop, delta;
@@ -125,11 +164,6 @@ void PoC_TPA(void *input) {
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14000,
 							 .tls = false};
-
-  if(!initialize_tpm(ek_handle, ak_handle)) {
-    fprintf(stdout, "Could not initialize TPM conf\n");
-    return ;
-  }
 
   index_file = fopen(file_index_path_name, "r");
   if(index_file == NULL){
@@ -250,6 +284,7 @@ bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle) {
 
   keys_conf = fopen("/etc/tc/keys.conf", "r");
   if(keys_conf == NULL) { // keys have not been created yet. Create EK and AK and save handle's index in file
+    fprintf(stdout, "init\n");
     goto generate_keys;
   }else { // file exists: check that handles are written in the file. If not regenerate keys
     if(fscanf(keys_conf, "%s\n%s\n", ek_handle, ak_handle) != 2){
