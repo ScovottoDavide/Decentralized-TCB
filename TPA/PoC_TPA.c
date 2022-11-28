@@ -398,7 +398,7 @@ bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist) {
   memcpy(whitelistBlob.ak_digest, digest, md_len);
   whitelistBlob.ak_digest[SHA256_DIGEST_LENGTH] = '\0';
 
-  whitelist_fp = fopen("../Initialization_Utils/whitelist", "rb");
+  whitelist_fp = fopen("../Whitelist_generator/whitelist", "rb");
   if (!whitelist_fp) {
     fprintf(stdout, "\nNo whitelist file found! Skipping whitelist verification!\n\n");
   } else {
