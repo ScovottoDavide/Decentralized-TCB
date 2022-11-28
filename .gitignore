@@ -1,4 +1,5 @@
 *
+HeartBeat-Utils/generate_and_dispatch_indexes.sh
 !*.c
 !*.h
 !*.py
