@@ -68,6 +68,17 @@ typedef struct {
   AK_DIGEST_BLOB ak_digest_blob;
 } TO_SEND;
 
+struct whitelist_entry {
+    u_int8_t digest[SHA256_DIGEST_LENGTH*2+1];
+    u_int16_t path_len;
+    char *path;
+};
+typedef struct {
+  u_int8_t ak_digest[SHA256_DIGEST_LENGTH+1];
+  u_int16_t number_of_entries;
+  struct whitelist_entry *white_entries;
+} WHITELIST_BLOB;
+
 bool pcr_parse_list(const char *str, size_t len, TPMS_PCR_SELECTION *pcr_select);
 bool pcr_parse_selections(const char *arg, TPML_PCR_SELECTION *pcr_select);
 
@@ -127,4 +138,4 @@ TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest);
 
 // tpm2_quote_internal in createak_util.h --> to fix dependencies!!!!!!!!!
 
-TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytesSize);
+TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytesSize, uint16_t *ak_handle);

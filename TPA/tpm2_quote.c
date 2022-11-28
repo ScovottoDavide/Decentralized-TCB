@@ -793,14 +793,15 @@ TSS2_RC tpm2_quote_internal(ESYS_CONTEXT *esys_context, tpm2_loaded_object *quot
   return TSS2_RC_SUCCESS;
 }
 
-TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytesSize)
+TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytesSize, uint16_t *ak_handle)
 {
   bool res;
   TSS2_RC tss_r;
   int i;
 
   // AK handle --> supposed to be fixed on this value
-  ctx.key.ctx_path = "0x81000001";
+  ctx.key.ctx_path = malloc( HANDLE_SIZE * sizeof(char));
+  snprintf((char *)ctx.key.ctx_path, HANDLE_SIZE, "%s", ak_handle);
   ctx.key.auth_str = NULL;
 
   // parse pcr list --> sha1:0,1,2,3,4,5,6,7,8,9,10+sha256:0,1,2,3,4,5,6,7,8,9,10

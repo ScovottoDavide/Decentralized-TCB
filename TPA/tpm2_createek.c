@@ -101,7 +101,7 @@ static TSS2_RC init_ek_public(TPM2B_PUBLIC *public){
   return TSS2_RC_SUCCESS;
 }
 
-TSS2_RC tpm2_createek(ESYS_CONTEXT *ectx) {
+TSS2_RC tpm2_createek(ESYS_CONTEXT *ectx, uint16_t *ek_handle) {
   TSS2_RC res;
   ESYS_TR objectHandle = ESYS_TR_NONE;
   TPM2B_PUBLIC inPublic;
@@ -179,7 +179,10 @@ if(res != TSS2_RC_SUCCESS){
     if(res != TSS2_RC_SUCCESS){
       printf("Error while trying to find vacant persistent handle\n");
       return TSS2_ESYS_RC_BAD_VALUE;
-    } //else fprintf(stdout, "Found persistent handle at 0x%x\n", ctx.auth_ek.object.handle);
+    } else {
+      //fprintf(stdout, "Found free persistent handle at 0x%x\n", ctx.auth_ek.object.handle);
+      snprintf((char *)ek_handle, HANDLE_SIZE, "0x%X", ctx.auth_ek.object.handle);
+    }
 
     ESYS_TR out_handle;
     res = Esys_EvictControl(ectx, ESYS_TR_RH_OWNER, objectHandle, ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE, ctx.auth_ek.object.handle, &out_handle);

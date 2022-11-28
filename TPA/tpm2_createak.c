@@ -49,7 +49,7 @@ static TSS2_RC init_ak_public(const char* alg_details, TPM2B_PUBLIC *public){
     return TSS2_RC_SUCCESS;
 }
 
-static TSS2_RC create_ak(ESYS_CONTEXT *ectx) {
+static TSS2_RC create_ak(ESYS_CONTEXT *ectx, uint16_t *ak_handle) {
   TSS2_RC res;
 
   TPML_PCR_SELECTION creation_pcr = { .count = 0 };
@@ -163,12 +163,12 @@ static TSS2_RC create_ak(ESYS_CONTEXT *ectx) {
   }
 
   // print name
-  fprintf(stdout, "loaded-key:\n   name:");
+  /*fprintf(stdout, "loaded-key:\n   name:");
   int i=0;
   for(i=0; i<key_name->size; i++){
     fprintf(stdout, "%x", key_name->name[i]);
   }
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\n");*/
 
   // If the AK isn't persisted we always save a context file of the
   // transient AK handle for future tool interactions.
@@ -178,7 +178,10 @@ static TSS2_RC create_ak(ESYS_CONTEXT *ectx) {
   if(res != TSS2_RC_SUCCESS){
     printf("Error while trying to find vacant persistent handle\n");
     return TSS2_ESYS_RC_BAD_VALUE;
-  } //else fprintf(stdout, "Found persistent handle at 0x%x\n", ctx.ak.object.handle);
+  } else {
+    //fprintf(stdout, "Found persistent handle at 0x%x\n", ctx.ak.object.handle);
+    snprintf((char *)ak_handle, HANDLE_SIZE, "0x%X", ctx.ak.object.handle);
+  }
 
   ESYS_TR out_handle = ESYS_TR_NONE;
 
@@ -197,7 +200,7 @@ static TSS2_RC create_ak(ESYS_CONTEXT *ectx) {
   return TSS2_RC_SUCCESS;
 }
 
-TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx) {
+TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx, uint16_t *ek_handle, uint16_t *ak_handle) {
   TSS2_RC res;
 
   // TODO
@@ -212,8 +215,9 @@ TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx) {
     return TSS2_ESYS_RC_BAD_VALUE;
   }*/
 
-  // This is the -C option in createak command (for now manually)
-  ctx.ek.ctx_arg = "0x81000000";
+  // This is the -C option in createak command
+  ctx.ek.ctx_arg = malloc(HANDLE_SIZE * sizeof(char));
+  snprintf((char *)ctx.ek.ctx_arg, HANDLE_SIZE, "%s", ek_handle);
   res = tpm2_util_object_load(ectx, ctx.ek.ctx_arg, &ctx.ek.ek_ctx, TPM2_HANDLE_ALL_W_NV);
   if(res != TSS2_RC_SUCCESS){
     printf("Could not load EK context\n");
@@ -250,9 +254,9 @@ TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx) {
     return TSS2_ESYS_RC_BAD_VALUE;
   }
 
-  return create_ak(ectx);
+  return create_ak(ectx, ak_handle);
 }
 
-TSS2_RC tpm2_createak(ESYS_CONTEXT *ectx) {
-  return tpm2_tool_onrun(ectx);
+TSS2_RC tpm2_createak(ESYS_CONTEXT *ectx, uint16_t *ek_handle, uint16_t *ak_handle) {
+  return tpm2_tool_onrun(ectx, ek_handle, ak_handle);
 }

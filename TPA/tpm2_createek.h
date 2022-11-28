@@ -18,4 +18,4 @@
     }
 
 static TSS2_RC init_ek_public(TPM2B_PUBLIC *public);
-TSS2_RC tpm2_createek(ESYS_CONTEXT *ectx);
+TSS2_RC tpm2_createek(ESYS_CONTEXT *ectx, uint16_t *ek_handle);

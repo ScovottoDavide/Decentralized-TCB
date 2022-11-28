@@ -43,6 +43,6 @@ struct createak_context {
 };
 
 static TSS2_RC init_ak_public(const char* alg_details, TPM2B_PUBLIC *public);
-static TSS2_RC create_ak(ESYS_CONTEXT *ectx);
-TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx);
-TSS2_RC tpm2_createak(ESYS_CONTEXT *ectx);
+static TSS2_RC create_ak(ESYS_CONTEXT *ectx, uint16_t *ak_handle);
+TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx, uint16_t *ek_handle, uint16_t *ak_handle);
+TSS2_RC tpm2_createak(ESYS_CONTEXT *ectx, uint16_t *ek_handle, uint16_t *ak_handle);

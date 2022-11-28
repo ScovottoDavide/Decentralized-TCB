@@ -5,6 +5,8 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tpm2_types.h>
 
+#define HANDLE_SIZE 11
+
 typedef enum tpm2_handle_flags tpm2_handle_flags;
 enum tpm2_handle_flags {
     TPM2_HANDLE_FLAGS_NONE = 0,

@@ -16,11 +16,16 @@
 
 #define BILLION  1000000000L;
 
-int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context);
-bool loadAKdigest(TO_SEND *TpaData);
+bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle);
+int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle);
+bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size);
+bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist);
+bool sendAkPub_WAM(WAM_channel *ch_send_AkPub, TO_SEND *TpaData);
 int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub);
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub,
+  IOTA_Index *write_index_whitelist);
+void hex_print(uint8_t *raw_data, size_t raw_size);
 
 int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
 void PoC_TPA(void *input);
@@ -104,28 +109,34 @@ void PoC_TPA(void *input) {
   int persistent_handles = 0, i;
   TO_SEND TpaData;
   ssize_t imaLogBytesSize = 0;
+  uint16_t ek_handle[HANDLE_SIZE], ak_handle[HANDLE_SIZE];
 
   // WAM
   uint8_t mykey[]="supersecretkeyforencryptionalby";
-	WAM_channel ch_read_hearbeat, ch_send, ch_send_AkPub;
+	WAM_channel ch_read_hearbeat, ch_send, ch_send_AkPub, ch_send_whitelist;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	uint8_t nonce[32];
 	uint32_t expected_size = 32;
 	uint8_t ret = 0;
-  IOTA_Index heartBeat_index, write_index, write_index_AkPub;
+  IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
   FILE *index_file;
 
 	IOTA_Endpoint privatenet = {.hostname = "130.192.86.15\0",
 							 .port = 14000,
 							 .tls = false};
 
+  if(!initialize_tpm(ek_handle, ak_handle)) {
+    fprintf(stdout, "Could not initialize TPM conf\n");
+    return ;
+  }
+
   index_file = fopen(file_index_path_name, "r");
   if(index_file == NULL){
     fprintf(stdout, "Cannot open file\n");
     return ;
   }
-  get_Index_from_file(index_file, &heartBeat_index, &write_index, &write_index_AkPub);
+  get_Index_from_file(index_file, &heartBeat_index, &write_index, &write_index_AkPub, &write_index_whitelist);
   fclose(index_file);
 	
   // set read index of heatbeat
@@ -134,9 +145,21 @@ void PoC_TPA(void *input) {
   // set write index for the AkPub
   WAM_init_channel(&ch_send_AkPub, 1, &privatenet, &k, &a);
   set_channel_index_write(&ch_send_AkPub, write_index_AkPub);
+  // set write index for the whitelist
+  WAM_init_channel(&ch_send_whitelist, 1, &privatenet, &k, &a);
+  set_channel_index_write(&ch_send_whitelist, write_index_whitelist);
   // Set write index for the quote 
   WAM_init_channel(&ch_send, 1, &privatenet, &k, &a);
   set_channel_index_write(&ch_send, write_index);
+
+  if(!sendAkPub_WAM(&ch_send_AkPub, &TpaData)) {
+    fprintf(stdout, "Could not write AK pub on tangle\n");
+    return ;
+  }
+  if(!sendWhitelist_WAM(&ch_send_whitelist)){
+    fprintf(stdout, "Could not write Whitelist on tangle\n");
+    return ;
+  }
 
 	while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size){
@@ -156,32 +179,6 @@ void PoC_TPA(void *input) {
         printf("Could not initialize esys context\n");
         return ;
       }
-      /**
-      Assumption: Ek is at NV-Index 0x81000000, AK is at NV-Index 0x81000001
-      and they are the only persistent handles in NV-RAM.
-      See if optimizable!
-      **/
-      // Read the # of persistent handles: if 0 proceed in creating EK and AK, otherwise DO NOT
-      persistent_handles = tpm2_getCap_handles_persistent(esys_context);
-      if (persistent_handles < 0) {
-        printf("Error while reading persistent handles!\n");
-        return ;
-      }
-      if (!persistent_handles) {
-        fprintf(stdout, "Generating EK...\n");
-        tss_r = tpm2_createek(esys_context);
-        if (tss_r != TSS2_RC_SUCCESS) {
-          printf("Error in tpm2_createek\n");
-          return ;
-        }
-        fprintf(stdout, "Generating AK...\n");
-        tss_r = tpm2_createak(esys_context);
-        if (tss_r != TSS2_RC_SUCCESS) {
-          printf("\tError creating AK\n");
-          return ;
-        }
-        tpm2_getCap_handles_persistent(esys_context);
-      }
       if (pcr_check_if_zeros(esys_context)) {
         // Extend both
         ExtendPCR9(esys_context, "sha1");
@@ -190,12 +187,7 @@ void PoC_TPA(void *input) {
         fprintf(stdout, "PCR9 sha256 extended\n");
       }
 
-      if(!loadAKdigest(&TpaData)) {
-        fprintf(stdout, "Could not load AK pub digest!\n");
-        return ;
-      }
-
-      tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize);
+      tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize, ak_handle);
       if (tss_r != TSS2_RC_SUCCESS) {
         printf("Error while computing quote!\n");
         return ;
@@ -237,7 +229,79 @@ end:
   return ;
 }
 
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub) {
+bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle) {
+  FILE *keys_conf;
+  // TPM
+  TSS2_RC tss_r;
+  ESYS_CONTEXT *esys_context = NULL;
+  TSS2_TCTI_CONTEXT *tcti_context = NULL;
+  int persistent_handles = 0, i;
+
+  tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
+  if (tss_r != TSS2_RC_SUCCESS) {
+    printf("Could not initialize tcti context\n");
+    return false;
+  }
+  tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
+  if (tss_r != TSS2_RC_SUCCESS) {
+    printf("Could not initialize esys context\n");
+    return false;
+  }
+
+  keys_conf = fopen("/etc/tc/keys.conf", "r");
+  if(keys_conf == NULL) { // keys have not been created yet. Create EK and AK and save handle's index in file
+    goto generate_keys;
+  }else { // file exists: check that handles are written in the file. If not regenerate keys
+    if(fscanf(keys_conf, "%s\n%s\n", ek_handle, ak_handle) != 2){
+      fprintf(stdout, "keys.conf file has been corrupted. Delete the file and re execute\n");
+      goto error;
+    }
+    
+    // Read the # of persistent handles and check that created/existing handles really exist
+    persistent_handles = tpm2_getCap_handles_persistent(esys_context, ek_handle, ak_handle);
+    if (persistent_handles == -1) {
+      printf("Error while reading persistent handles!\n");
+      goto error;
+    }
+    if(persistent_handles == -2){
+      fprintf(stdout, "Error, expected handles not found! keys.conf file has been corrupted. Delete the file and re execute\n");
+      goto error;
+    }
+    goto exit;
+  }
+
+generate_keys:
+  if(keys_conf != NULL) fclose(keys_conf);
+  keys_conf = fopen("/etc/tc/keys.conf", "w");
+  fprintf(stdout, "Generating EK...\n");
+  tss_r = tpm2_createek(esys_context, ek_handle);
+  if (tss_r != TSS2_RC_SUCCESS) {
+    printf("Error in tpm2_createek\n");
+    goto error;
+  }
+  fprintf(stdout, "Generating AK...\n");
+  tss_r = tpm2_createak(esys_context, ek_handle, ak_handle);
+  if (tss_r != TSS2_RC_SUCCESS) {
+    printf("\tError creating AK\n");
+    goto error;
+  }
+  fprintf(keys_conf, "%s\n%s\n", ek_handle, ak_handle);
+  fclose(keys_conf);
+  goto exit;
+
+error:
+  Esys_Finalize(&esys_context);
+  Tss2_TctiLdr_Finalize (&tcti_context);
+  return false;
+
+exit:
+  Esys_Finalize(&esys_context);
+  Tss2_TctiLdr_Finalize (&tcti_context);
+  return true;
+}
+
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub,
+  IOTA_Index *write_index_whitelist) {
   int len_file;
   char *data = NULL;
    //get len of file
@@ -262,11 +326,15 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_index")->valuestring, INDEX_HEX_SIZE, write_index_AkPub->index, INDEX_SIZE);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_AkPub->keys.pub, ED_PUBLIC_KEY_BYTES);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_AkPub->keys.priv, ED_PRIVATE_KEY_BYTES);
+  
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "whitelist_index")->valuestring, INDEX_HEX_SIZE, write_index_whitelist->index, INDEX_SIZE);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "whitelist_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_whitelist->keys.pub, ED_PUBLIC_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "whitelist_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_whitelist->keys.priv, ED_PRIVATE_KEY_BYTES);
 
   free(data);
 }
 
-bool loadAKdigest(TO_SEND *TpaData) {
+bool sendAkPub_WAM(WAM_channel *ch_send_AkPub, TO_SEND *TpaData) {
   unsigned char *akPub = NULL;
   unsigned char *digest = NULL;
 
@@ -280,24 +348,116 @@ bool loadAKdigest(TO_SEND *TpaData) {
   int md_len = computeDigestEVP(akPub, "sha256", digest);
   if(md_len <= 0)
     return false;
-  
   TpaData->ak_digest_blob.tag = 3;
   TpaData->ak_digest_blob.size = md_len;
   TpaData->ak_digest_blob.buffer = malloc(TpaData->ak_digest_blob.size + 1 * sizeof(u_int8_t));
   memcpy(TpaData->ak_digest_blob.buffer, digest, TpaData->ak_digest_blob.size);
   TpaData->ak_digest_blob.buffer[TpaData->ak_digest_blob.size] = '\0';
+  
+  fprintf(stdout, "Writing AkPub...\n");
+  WAM_write(ch_send_AkPub, akPub, (uint32_t)strlen(akPub), false);
 
   free(digest);
   return true;
 }
 
-int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context) {
+bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size) {
+  unsigned char digest[SHA256_DIGEST_LENGTH*2 + 1];
+  int file_path_len = 0;
+  int i = 0;
+  for (i = 0; i < size; i++) {
+    fscanf(fp, "%s %d", white_entries[i].digest, &file_path_len);
+    white_entries[i].path_len = file_path_len;
+    white_entries[i].digest[SHA256_DIGEST_LENGTH*2] = '\0';
+    white_entries[i].path = malloc(file_path_len + 1 * sizeof(char));
+    fscanf(fp, "%s", white_entries[i].path);
+    white_entries[i].path[file_path_len] = '\0';
+    //fprintf(stdout, "%s %s\n", white_entries[i].digest, white_entries[i].path);
+  }
+  return true;
+}
+
+bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist) {
+  unsigned char *akPub = NULL;
+  unsigned char *digest = NULL;
+  uint8_t *to_send_data = NULL, last[4] = "done";
+  size_t bytes_to_send = 0, acc = 0;
+  FILE *whitelist_fp;
+  int num_entries = 0, i;
+  WHITELIST_BLOB whitelistBlob;
+
+  bool res = openAKPub("/etc/tc/ak.pub.pem", &akPub);
+  if(!res) {
+    fprintf(stderr, "Could not read AK pub\n");
+    return false;
+  }
+  digest = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
+  int md_len = computeDigestEVP(akPub, "sha256", digest);
+  if(md_len <= 0)
+    return false;
+  memcpy(whitelistBlob.ak_digest, digest, md_len);
+  whitelistBlob.ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+
+  whitelist_fp = fopen("../Initialization_Utils/whitelist", "rb");
+  if (!whitelist_fp) {
+    fprintf(stdout, "\nNo whitelist file found! Skipping whitelist verification!\n\n");
+  } else {
+    fscanf(whitelist_fp, "%d", &num_entries);
+    whitelistBlob.number_of_entries = num_entries;
+    whitelistBlob.white_entries = malloc(num_entries * sizeof(struct whitelist_entry));
+    if (!whitelistBlob.white_entries) {
+      fprintf(stdout, "OOM %d\n", num_entries);
+      return false;
+    }
+    loadWhitelist(whitelist_fp, whitelistBlob.white_entries, num_entries);
+    fclose(whitelist_fp);
+  }
+
+  bytes_to_send += SHA256_DIGEST_LENGTH * sizeof(u_int8_t);
+  bytes_to_send += sizeof(u_int16_t);
+  for(i = 0; i < whitelistBlob.number_of_entries; i++){
+    bytes_to_send += SHA256_DIGEST_LENGTH*2 * sizeof(u_int8_t);
+    bytes_to_send += sizeof(u_int16_t);
+    bytes_to_send += whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t);
+  }
+  bytes_to_send += sizeof last;
+
+  to_send_data = malloc(bytes_to_send * sizeof(u_int8_t));
+
+  memcpy(to_send_data + acc, whitelistBlob.ak_digest, SHA256_DIGEST_LENGTH * sizeof(u_int8_t));
+  acc += SHA256_DIGEST_LENGTH * sizeof(u_int8_t);
+  memcpy(to_send_data + acc, &whitelistBlob.number_of_entries, sizeof(u_int16_t));
+  acc += sizeof(u_int16_t);
+  for(i = 0; i < whitelistBlob.number_of_entries; i++){
+    memcpy(to_send_data + acc, whitelistBlob.white_entries[i].digest, SHA256_DIGEST_LENGTH*2 * sizeof(u_int8_t));
+    acc += SHA256_DIGEST_LENGTH*2 * sizeof(u_int8_t);
+    memcpy(to_send_data + acc, &whitelistBlob.white_entries[i].path_len, sizeof(u_int16_t));
+    acc += sizeof(u_int16_t);
+    memcpy(to_send_data + acc, whitelistBlob.white_entries[i].path, whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t));
+    acc += whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t);
+  }
+  memcpy(to_send_data + acc, last, sizeof last);
+  acc += sizeof last;
+
+  fprintf(stdout, "Writing Whitelist... [%d bytes] at: ", bytes_to_send); hex_print(ch_send_whitelist->current_index.index, INDEX_SIZE);
+  WAM_write(ch_send_whitelist, to_send_data, (uint32_t)bytes_to_send, false);
+  fprintf(stdout, "DONE\n", bytes_to_send);
+
+  free(digest); 
+  free(to_send_data);
+
+  return true;
+}
+
+int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle) {
   TSS2_RC tss_r;
   TPM2_CAP capability = TPM2_CAP_HANDLES;
   UINT32 property = TPM2_HR_PERSISTENT;
   UINT32 propertyCount = TPM2_MAX_CAP_HANDLES;
   TPMS_CAPABILITY_DATA *capabilityData;
   TPMI_YES_NO moreData;
+  char handle_hex[HANDLE_SIZE];
+  int h1 = 0, h2 = 0;
 
   //printf("\nReading persistent handles!\n");
   tss_r = Esys_GetCapability(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
@@ -312,7 +472,14 @@ int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context) {
     /*for (i = 0; i < capabilityData->data.handles.count; i++) {
       printf("Persistent Handle: 0x%X\n", capabilityData->data.handles.handle[i]);
     }*/
-    return capabilityData->data.handles.count;
+    for (i = 0; i < capabilityData->data.handles.count; i++) {
+      snprintf(handle_hex, HANDLE_SIZE, "0x%X", capabilityData->data.handles.handle[i]);
+      if(strcmp((char *)ek_handle, handle_hex) == 0) h1 = 1;
+      if(strcmp((char *)ak_handle, handle_hex) == 0) h2 = 1;
+    }
+    if(h1 && h2)
+      return 0;
+    return -2;
 }
 
 int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send) {
@@ -471,4 +638,12 @@ bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context) {
   }
 
   return true;
+}
+
+void hex_print(uint8_t *raw_data, size_t raw_size) {
+  int i;
+
+  for(i = 0; i < raw_size; i++)
+    fprintf(stdout, "%02X", raw_data[i]);
+  fprintf(stdout, "\n");
 }
