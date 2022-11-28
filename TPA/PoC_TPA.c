@@ -259,6 +259,13 @@ void PoC_TPA(void *input) {
       }
       pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     }
+    pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+    if(tpa_status == 1){ // stop
+      fprintf(stdout, "TPA Stopped\n");
+      pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+      goto end;
+    }
+    pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
   }
 
 end:
