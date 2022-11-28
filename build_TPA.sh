@@ -13,11 +13,6 @@ else
    exit -1
 fi
 
-cd Initialization_Utils
-echo "Building Initialization utils..."
-make WAM_DIR=$1
-cd ..
-
 cd TPA
 echo "Building TPA..."
 make WAM_DIR=$1
