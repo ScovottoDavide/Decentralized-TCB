@@ -526,8 +526,8 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   int i, j;
   uint8_t last[4] = "done", *response_buff = NULL;
 
+  bytes_to_send += sizeof(uint16_t);
   for(i = 0; i < nodes_number; i++) {
-    bytes_to_send += sizeof(uint16_t);
     bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(uint8_t);
   }
   bytes_to_send += sizeof last;
