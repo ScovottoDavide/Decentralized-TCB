@@ -10,7 +10,7 @@
 
 typedef struct {
   uint8_t ak_digest[SHA256_DIGEST_LENGTH+1];
-  uint8_t status;
+  uint8_t status; // 0 = NT, 1 = T, 2 = NT and already ignored
 }STATUS_TABLE;
 
 bool legal_int(const char *str);
@@ -19,8 +19,8 @@ bool openAKPub(const char *path, unsigned char **akPub);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
 bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
             TO_SEND TpaData, int nodes_number);
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
-      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, int nodes_number);
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *read_indexes, 
+    IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, IOTA_Index *read_indexes_status, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE *local_trust_status, int nodes_number);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
@@ -105,9 +105,10 @@ void PoC_Verifier(void *input){
   STATUS_TABLE *local_trust_status;
   FILE *index_file, **ak_files;
   
-  IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index;
+  IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index, 
+    *read_indexes_status = NULL;
   uint8_t mykey[]="supersecretkeyforencryptionalby";
-	WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak, *ch_read_whitelist;
+	WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak, *ch_read_whitelist, *ch_read_status;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
@@ -127,10 +128,12 @@ void PoC_Verifier(void *input){
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_whitelist = malloc(nodes_number * sizeof(WAM_channel));
+  ch_read_status = malloc(nodes_number * sizeof(WAM_channel));
 
   read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
   read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
   read_indexes_whitelist = malloc(nodes_number * sizeof(IOTA_Index));
+  read_indexes_status = malloc(nodes_number * sizeof(IOTA_Index));
 
   ak_files = malloc(nodes_number * sizeof(FILE *));
   offset = malloc(nodes_number * sizeof(uint32_t));
@@ -153,7 +156,8 @@ void PoC_Verifier(void *input){
     fprintf(stdout, "Cannot open index file\n");
     return ;
   }
-  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, read_indexes, read_indexes_AkPub, read_indexes_whitelist, nodes_number);
+  get_Index_from_file(index_file, &heartBeat_index, &write_response_index, read_indexes, read_indexes_AkPub, read_indexes_whitelist,
+    read_indexes_status, nodes_number);
   fclose(index_file);
 
   // Set read index of heartbeat
@@ -173,6 +177,11 @@ void PoC_Verifier(void *input){
   for(i = 0; i < nodes_number; i++){
     WAM_init_channel(&ch_read_whitelist[i], i, &privatenet, &k, &a);
     set_channel_index_read(&ch_read_whitelist[i], read_indexes_whitelist[i].index);
+  }
+  // Set indexes for reading RAs local status
+  for(i = 0; i < nodes_number; i++){
+    WAM_init_channel(&ch_read_status[i], i, &privatenet, &k, &a);
+    set_channel_index_read(&ch_read_status[i], read_indexes_status[i].index);
   }
 
   // Set write index for response to heartbeat 
@@ -216,6 +225,10 @@ void PoC_Verifier(void *input){
   read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
   for(i = 0; i < nodes_number; i++)
     read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
+  
+  // Initialize local trust status --> all T before verifying them
+  for(i = 0; i < nodes_number; i++)
+    local_trust_status[i].status = 1;
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
@@ -235,7 +248,7 @@ void PoC_Verifier(void *input){
     }
     i = 0;
     while(have_to_read > 0){
-      if(verified_nodes[i] == 0){
+      if(verified_nodes[i] == 0 && local_trust_status[i].status == 1){ // if NT do not read anymore 
         if(!WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message)){            
           if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
             memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
@@ -318,8 +331,14 @@ void PoC_Verifier(void *input){
           //sendRAresponse(&ch_write_response, ver_response, nodes_number);
           sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number);
           have_to_read = 0;
-          for(j = 0; j < nodes_number; j++)
+          for(j = 0; j < nodes_number; j++){
             verified_nodes[j] = 0;
+            if(local_trust_status[j].status == 0){
+              nodes_number -= 1;
+              local_trust_status[j].status = 2;
+            }
+          }
+          // Get other RAs's local status 
         }
       }
       if((i + 1) == nodes_number) i = 0;
@@ -390,12 +409,13 @@ bool legal_int(const char *str) {
     return true;
 }
 
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, 
-      IOTA_Index *read_indexes, IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, int nodes_number) {
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *read_indexes, 
+    IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, IOTA_Index *read_indexes_status, int nodes_number) {
   int len_file, i = 0;
   char *data = NULL, read_index_base_str[20] = "read_index_", akread_index_base_str[20] = "AkPub_read_";
   char akpub_index_base_str[20]="pub_key_", index_AkPub_base_str[25]="AkPub_read_pubkey_";
   char whitelist_index_base_str[30]="whitelist_read_", whitelist_index_read_base_str[40]="whitelist_read_pubkey_";
+  char base_index_str_status[30] = "status_read_", base_pub_str_status[40] = "status_read_pubkey_";
 
   //get len of file
   fseek(index_file, 0L, SEEK_END);
@@ -433,6 +453,12 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
     whitelist_index_read_base_str[22] = (i + 1) + '0';
     hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes_whitelist[i].index, INDEX_SIZE);
     hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_read_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+  }
+  for(i = 0; i < nodes_number; i++){
+    base_index_str_status[12] = (i + 1) + '0';
+    base_pub_str_status[19] = (i + 1) + '0';
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, base_index_str_status)->valuestring, INDEX_HEX_SIZE, read_indexes_status[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, base_pub_str_status)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_status[i].keys.pub, ED_PUBLIC_KEY_BYTES);
   }
   
   free(data);
