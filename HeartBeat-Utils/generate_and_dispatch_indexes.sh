@@ -28,9 +28,9 @@ cd generateIndexesWAM
 mv heartbeat_write.json ../heartbeat_WAM/
 #for i in $(seq 1 $1); do
     #echo "--> Sending TPA_index_node$i and RA_index_node$i file to node"
-    scp TPA_index_node1.json RA_index_node1.json pi@192.168.0.115:/etc/tc
+    scp TPA_index_node1.json RA_index_node1.json pi@192.168.0.116:/etc/tc
     scp TPA_index_node2.json RA_index_node2.json pi@192.168.0.114:/etc/tc
-    scp TPA_index_node3.json RA_index_node3.json pi@192.168.0.105:/etc/tc
+    scp TPA_index_node3.json RA_index_node3.json pi@192.168.0.109:/etc/tc
     scp TPA_index_node4.json RA_index_node4.json pi@192.168.0.108:/etc/tc
 #done
 rm TPA_index_node* RA_index_node*
