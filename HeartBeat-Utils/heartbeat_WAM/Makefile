@@ -8,6 +8,7 @@ endif
 SOURCE_1 = sampleHeartBeat.c
 SOURCE_2 = ${WAM_DIR}/WAM/WAM.c 
 SOURCE_3 = ${WAM_DIR}/WAM/wam-wrapper.c
+SOURCE_3 = ../../Consensous/consensous.c
 
 
 LDFLAGS+=\

@@ -26,6 +26,7 @@ int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_lo
             }
         }
     }
+    global_trust_status->number_of_entries = inserted_global;
 
     // calculate overall trust
     for(i = 0; i < nodes_number; i++) {
@@ -38,11 +39,11 @@ int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_lo
     }
 
     // Last pass on global
-    for(i = 0; i < inserted_global; i++) {
+    for(i = 0; i < global_trust_status->number_of_entries; i++) {
         if(global_trust_status->status_entries[i].status > consensous_rule)
             global_trust_status->status_entries[i].status = 1;
         else 
             global_trust_status->status_entries[i].status = 0;
     }
-
+    return 1;
 }

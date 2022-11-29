@@ -5,9 +5,12 @@
 #include <pthread.h>
 #include <openssl/rand.h>
 #include "WAM/WAM.h"
+#include "../../Consensous/consensous.h"
 
 #define NONCE_LEN 32
 
+void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number);
+void hex_print(uint8_t *raw_data, size_t raw_size);
 void menu(void *in);
 void PoC_heartbeat(void *nodes_number_p);
 bool legal_int(const char *str);
@@ -85,9 +88,10 @@ void PoC_heartbeat(void *nodes_number_p) {
 	uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
+    STATUS_TABLE *read_local_trust_status, global_trust_status;
 	
     FILE *index_file;
-    int len_file, i, new_nonce_send = 1, received_responses = 0, *responses_map;
+    int len_file, i, new_nonce_send = 1, received_responses = 0, *responses_map, max_number_trust_entries = 0;
     char *data = NULL, prefix_str_index[12]="read_index_", prefix_str_pubK[9]="pub_key_", buf_index_str[100] = {0};
 
     IOTA_Index file_index, *read_response_indexes;
@@ -144,6 +148,8 @@ void PoC_heartbeat(void *nodes_number_p) {
         read_response_messages[i] = (uint8_t *) malloc(DATA_SIZE * 2 * sizeof(uint8_t));
     responses_map = calloc(nodes_number, sizeof(int));
 
+    read_local_trust_status = malloc(nodes_number * sizeof(STATUS_TABLE));
+
     while(1){
         if(new_nonce_send){
             if (!RAND_bytes(nonce, NONCE_LEN)) {
@@ -176,11 +182,27 @@ void PoC_heartbeat(void *nodes_number_p) {
                     }
                     else if(memcmp(last, read_response_messages[i] + ch_read_responses[i].recv_bytes - sizeof last, sizeof last) == 0) {
                         fprintf(stdout, "New response arrived of bytes [%d]\n", ch_read_responses[i].recv_bytes);
+                        parseLocalTrustStatusMessage(read_response_messages[i], read_local_trust_status, i);
+                        if(read_local_trust_status[i].number_of_entries > max_number_trust_entries)
+                            max_number_trust_entries = read_local_trust_status[i].number_of_entries;
                         received_responses+=1;
                         responses_map[i] = 1;
                     }
                 }
                 if(received_responses == nodes_number){
+                    // consencous proc
+                    global_trust_status.number_of_entries = max_number_trust_entries;
+                    global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
+                    consensous_proc(NULL, read_local_trust_status, &global_trust_status, nodes_number);
+                    fprintf(stdout, "Consensous result: \n");
+                    for(int j = 0; j < global_trust_status.number_of_entries; j++){
+                        if(global_trust_status.status_entries[j].status == 1) {
+                            fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> T\n");
+                        }
+                        else{
+                            fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
+                        }
+                    }
                     fprintf(stdout, "All responses arrived! Start new cicle.\n");
                     new_nonce_send = 1;
                     received_responses = 0;
@@ -222,4 +244,28 @@ early_end:
     }
     pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     return ;
+}
+
+void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number) {
+    int acc = 0, i;
+
+    memcpy(&read_local_trust_status[node_number].number_of_entries, read_trust_message + acc, sizeof(uint16_t));
+    acc += sizeof(uint16_t);
+    
+    read_local_trust_status[node_number].status_entries = malloc(read_local_trust_status[node_number].number_of_entries * sizeof(STATUS_ENTRY));
+
+    for(i = 0; i < read_local_trust_status[node_number].number_of_entries; i++) {
+        memcpy(read_local_trust_status[node_number].status_entries[i].ak_digest, read_trust_message + acc, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+        read_local_trust_status[node_number].status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+        acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
+        memcpy(&read_local_trust_status[node_number].status_entries[i].status, read_trust_message + acc, sizeof(uint8_t));
+        acc += sizeof(uint8_t);
+    }
+}
+
+void hex_print(uint8_t *raw_data, size_t raw_size) {
+  int i;
+
+  for(i = 0; i < raw_size; i++)
+    fprintf(stdout, "%02X", raw_data[i]);
 }

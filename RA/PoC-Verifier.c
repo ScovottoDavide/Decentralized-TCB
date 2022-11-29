@@ -232,6 +232,7 @@ void PoC_Verifier(void *input){
       expected_size+=32;
       have_to_read = 1;
 
+      local_trust_status.number_of_entries = nodes_number;
       for(i = 0; i < nodes_number; i++){
         ch_read_attest[i].recv_bytes = 0;
         ch_read_attest[i].recv_msg = 0;
@@ -537,9 +538,9 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
     return ;
   }
 
+  memcpy(response_buff + acc, &local_trust_status.number_of_entries, sizeof(uint16_t));
+  acc += sizeof(uint16_t);
   for(i = 0; i < nodes_number; i++){
-    memcpy(response_buff + acc, &local_trust_status.number_of_entries, sizeof(uint16_t));
-    acc += sizeof(uint16_t);
     memcpy(response_buff + acc, &local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
     acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
     memcpy(response_buff + acc, &local_trust_status.status_entries[i].status, sizeof(uint8_t));
