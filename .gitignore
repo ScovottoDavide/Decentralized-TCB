@@ -1,11 +1,11 @@
 *
-HeartBeat-Utils/generate_and_dispatch_indexes.sh
 !*.c
 !*.h
 !*.py
 !*.pdf
 !*.md
 !*.sh
+HeartBeat-Utils/generate_and_dispatch_indexes.sh
 !TPA
 !RA
 !IMA
