@@ -170,7 +170,7 @@ bool verify(void) {
 
   int rc = EVP_PKEY_verify_init(pkey_ctx);
   if (!rc) {
-    fprintf(stderr, "EVP_PKEY_verify_init failed\n", rc);
+    fprintf(stderr, "EVP_PKEY_verify_init failed\n");
     goto end;
   }
 

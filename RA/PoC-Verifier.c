@@ -18,7 +18,7 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *read_indexes, 
     IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, IOTA_Index *read_indexes_status, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
-void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE *local_trust_status, int nodes_number);
+void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
 
 typedef struct {
@@ -98,7 +98,7 @@ void PoC_Verifier(void *input){
   int i, j, *verified_nodes;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
-  STATUS_TABLE *local_trust_status;
+  STATUS_TABLE local_trust_status;
   FILE *index_file, **ak_files;
   
   IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index, 
@@ -119,7 +119,7 @@ void PoC_Verifier(void *input){
   ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
   whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
   pcrs_mem = malloc(nodes_number * sizeof(PCRS_MEM));
-  local_trust_status = malloc(nodes_number * sizeof(STATUS_TABLE)); 
+  local_trust_status.status_entries = malloc(nodes_number * sizeof(STATUS_TABLE)); 
 
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
@@ -224,7 +224,7 @@ void PoC_Verifier(void *input){
   
   // Initialize local trust status --> all T before verifying them
   for(i = 0; i < nodes_number; i++)
-    local_trust_status[i].status = 1;
+    local_trust_status.status_entries[i].status = 1;
 
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
@@ -244,7 +244,7 @@ void PoC_Verifier(void *input){
     }
     i = 0;
     while(have_to_read > 0){
-      if(verified_nodes[i] == 0 && local_trust_status[i].status == 1){ // if NT do not read anymore 
+      if(verified_nodes[i] == 0 && local_trust_status.status_entries[i].status == 1){ // if NT do not read anymore 
         if(!WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message)){            
           if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
             memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
@@ -301,18 +301,18 @@ void PoC_Verifier(void *input){
 
             verified_nodes[i] = 1;
             
-            memcpy(local_trust_status[i].ak_digest, TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
-            local_trust_status[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+            memcpy(local_trust_status.status_entries[i].ak_digest, TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+            local_trust_status.status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
             if(ver_response[i].is_quote_successful == 1 && ver_response[i].number_white_entries == 0)
-              local_trust_status[i].status = 1;
+              local_trust_status.status_entries[i].status = 1;
             else 
-              local_trust_status[i].status = 0;
+              local_trust_status.status_entries[i].status = 0;
             
-            if(local_trust_status[i].status == 1){
-              fprintf(stdout, "Node ID: "); hex_print(local_trust_status[i].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> T\n");
+            if(local_trust_status.status_entries[i].status == 1){
+              fprintf(stdout, "Node ID: "); hex_print(local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> T\n");
             }
             else{
-              fprintf(stdout, "Node ID: "); hex_print(local_trust_status[i].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
+              fprintf(stdout, "Node ID: "); hex_print(local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
             } 
 
             for(j = 0; j < TpaData[i].ima_log_blob.size; j++){
@@ -329,9 +329,9 @@ void PoC_Verifier(void *input){
           have_to_read = 0;
           for(j = 0; j < nodes_number; j++){
             verified_nodes[j] = 0;
-            if(local_trust_status[j].status == 0){
+            if(local_trust_status.status_entries[j].status == 0){
               nodes_number -= 1;
-              local_trust_status[j].status = 2;
+              local_trust_status.status_entries[j].status = 2;
             }
           }
           // Get other RAs's local status 
@@ -386,7 +386,7 @@ early_end:
   free(ak_files);
   free(offset); free(previous_msg_num);
   free(verified_nodes);
-  free(local_trust_status);
+  free(local_trust_status.status_entries);
   pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
   if(verifier_status == 0){ // stop
     fprintf(stdout, "Verifier Stopped\n");
@@ -520,12 +520,13 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_numbe
   TpaData[node_number].ak_digest_blob.buffer[TpaData[node_number].ak_digest_blob.size] = '\0';
 }
 
-void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE *local_trust_status, int nodes_number) {
+void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number) {
   size_t acc = 0, bytes_to_send = 0;
   int i, j;
   uint8_t last[4] = "done", *response_buff = NULL;
 
   for(i = 0; i < nodes_number; i++) {
+    bytes_to_send += sizeof(uint16_t);
     bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(uint8_t);
   }
   bytes_to_send += sizeof last;
@@ -537,9 +538,11 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE *local_trust_status
   }
 
   for(i = 0; i < nodes_number; i++){
-    memcpy(response_buff + acc, &local_trust_status[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+    memcpy(response_buff + acc, &local_trust_status.number_of_entries, sizeof(uint16_t));
+    acc += sizeof(uint16_t);
+    memcpy(response_buff + acc, &local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
     acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-    memcpy(response_buff + acc, &local_trust_status[i].status, sizeof(uint8_t));
+    memcpy(response_buff + acc, &local_trust_status.status_entries[i].status, sizeof(uint8_t));
     acc += sizeof(uint8_t);
   }
   memcpy(response_buff + acc, last, sizeof last);

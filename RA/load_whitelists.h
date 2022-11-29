@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
-#include "/home/pi/WAM/WAM.h"
+#include "WAM/WAM.h"
 
 struct whitelist_entry {
     u_int8_t digest[SHA256_DIGEST_LENGTH*2+1];

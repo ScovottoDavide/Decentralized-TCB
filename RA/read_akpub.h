@@ -9,7 +9,7 @@
 #include <openssl/sha.h>
 #include <openssl/evp.h>
 #include <pthread.h>
-#include "/home/pi/WAM/WAM.h"
+#include "WAM/WAM.h"
 
 #define FILENAME_LEN 10
 #define FILE_PEM_LEN 8 // .pub.pem

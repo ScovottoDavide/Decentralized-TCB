@@ -3,7 +3,7 @@
 void cleanUpFolder(char *path) {
     DIR *folder = opendir(path);
     struct dirent *next_file;
-    char filepath[256];
+    char filepath[258];
 
     while( (next_file = readdir(folder)) != NULL ){
         if (!strcmp(".", next_file->d_name) || !strcmp("..", next_file->d_name))
