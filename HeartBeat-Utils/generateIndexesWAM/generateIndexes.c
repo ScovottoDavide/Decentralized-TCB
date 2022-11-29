@@ -82,6 +82,8 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
     char base_pub_str_akpub[30] = "AkPub_read_pubkey_";
     char base_index_str_whitelist[30] = "whitelist_read_"; 
     char base_pub_str_whitelist[40] = "whitelist_read_pubkey_";
+    char base_index_str_status[30] = "status_read_"; 
+    char base_pub_str_status[40] = "status_read_pubkey_";
 
     heartbeatWriteIndex_file = fopen("heartbeat_write.json", "w");
     if(heartbeatWriteIndex_file == NULL){
@@ -190,6 +192,14 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
                 base_pub_str_whitelist[22] = (k + 1) + '0';
                 cJSON_AddItemToObject(iota_index_json_RA, base_index_str_whitelist, cJSON_CreateString(index_hex));
                 cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_whitelist, cJSON_CreateString(pub_hex));
+
+                // read indexes for RA to read others local status
+                bin_2_hex(idx_RA[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
+                bin_2_hex(idx_RA[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
+                base_index_str_status[12] = (k + 1) + '0';
+                base_pub_str_status[19] = (k + 1) + '0';
+                cJSON_AddItemToObject(iota_index_json_RA, base_index_str_status, cJSON_CreateString(index_hex));
+                cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_status, cJSON_CreateString(pub_hex));
                 k+=1;
             }
         }
