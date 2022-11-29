@@ -13,6 +13,7 @@
 HeartBeat-Utils/generate_and_dispatch_indexes.sh
 !HeartBeat-Utils/heartbeat_WAM
 !HeartBeat-Utils/generateIndexesWAM
+!Consensous
 !Literature
 !Makefile
 !.gitignore

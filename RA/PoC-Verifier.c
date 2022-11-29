@@ -7,11 +7,7 @@
 #include <openssl/rand.h>
 #include "whitelist_verify.h"
 #include "WAM/WAM.h"
-
-typedef struct {
-  uint8_t ak_digest[SHA256_DIGEST_LENGTH+1];
-  uint8_t status; // 0 = NT, 1 = T, 2 = NT and already ignored
-}STATUS_TABLE;
+#include "../Consensous/consensous.h"
 
 bool legal_int(const char *str);
 void hex_print(uint8_t *raw_data, size_t raw_size);
@@ -123,7 +119,7 @@ void PoC_Verifier(void *input){
   ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
   whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
   pcrs_mem = malloc(nodes_number * sizeof(PCRS_MEM));
-  local_trust_status = malloc(nodes_number * sizeof(STATUS_TABLE));
+  local_trust_status = malloc(nodes_number * sizeof(STATUS_TABLE)); 
 
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
