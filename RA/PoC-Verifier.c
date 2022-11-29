@@ -119,7 +119,7 @@ void PoC_Verifier(void *input){
   ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
   whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
   pcrs_mem = malloc(nodes_number * sizeof(PCRS_MEM));
-  local_trust_status.status_entries = malloc(nodes_number * sizeof(STATUS_TABLE)); 
+  local_trust_status.status_entries = malloc(nodes_number * sizeof(STATUS_ENTRY)); 
 
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
