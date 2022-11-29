@@ -10,7 +10,6 @@
 #define NONCE_LEN 32
 
 void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number);
-void hex_print(uint8_t *raw_data, size_t raw_size);
 void menu(void *in);
 void PoC_heartbeat(void *nodes_number_p);
 bool legal_int(const char *str);
@@ -191,8 +190,10 @@ void PoC_heartbeat(void *nodes_number_p) {
                 }
                 if(received_responses == nodes_number){
                     // consencous proc
-                    global_trust_status.number_of_entries = max_number_trust_entries;
+                    global_trust_status.number_of_entries = max_number_trust_entries + 1; // have to consinder the node it self too
                     global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
+                    for(int j = 0; j < global_trust_status.number_of_entries; j++)
+                        global_trust_status.status_entries[j].status = 0;
                     consensous_proc(NULL, read_local_trust_status, &global_trust_status, nodes_number);
                     fprintf(stdout, "Consensous result: \n");
                     for(int j = 0; j < global_trust_status.number_of_entries; j++){
@@ -263,9 +264,3 @@ void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *rea
     }
 }
 
-void hex_print(uint8_t *raw_data, size_t raw_size) {
-  int i;
-
-  for(i = 0; i < raw_size; i++)
-    fprintf(stdout, "%02X", raw_data[i]);
-}

@@ -14,5 +14,6 @@ typedef struct {
   STATUS_ENTRY *status_entries;
 }STATUS_TABLE;
 
-int get_index_from_digest(STATUS_TABLE *status_table, uint8_t digest[SHA256_DIGEST_LENGTH+1], int number_of_entries);
+void hex_print(uint8_t *raw_data, size_t raw_size);
+int get_index_from_digest(STATUS_TABLE *status_table, uint8_t digest[SHA256_DIGEST_LENGTH+1]);
 int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number);
