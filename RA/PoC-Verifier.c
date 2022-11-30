@@ -95,7 +95,7 @@ void menu(void *in) {
 void PoC_Verifier(void *input){
   int nodes_number = ((ARGS *)input)->nodes_number;
   const char *file_index_path_name = ((ARGS *)input)->index_file_path_name;
-  int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024;
+  int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024 * 10;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
   STATUS_TABLE local_trust_status;
