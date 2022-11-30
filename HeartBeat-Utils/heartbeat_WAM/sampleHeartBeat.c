@@ -269,8 +269,8 @@ void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *rea
         memcpy(read_local_trust_status[node_number].status_entries[i].ak_digest, read_trust_message + acc, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
         read_local_trust_status[node_number].status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
         acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-        memcpy(&read_local_trust_status[node_number].status_entries[i].status, read_trust_message + acc, sizeof(uint8_t));
-        acc += sizeof(uint8_t);
+        memcpy(&read_local_trust_status[node_number].status_entries[i].status, read_trust_message + acc, sizeof(int8_t));
+        acc += sizeof(int8_t);
     }
 }
 

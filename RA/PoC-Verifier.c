@@ -533,7 +533,7 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   bytes_to_send += sizeof(uint16_t);
   bytes_to_send += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
   for(i = 0; i < nodes_number && local_trust_status.status_entries[i].status != 2; i++) {
-    bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(uint8_t);
+    bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(int8_t);
   }
   bytes_to_send += sizeof last;
 
@@ -550,8 +550,8 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   for(i = 0; i < nodes_number && local_trust_status.status_entries[i].status != 2; i++){
     memcpy(response_buff + acc, &local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
     acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-    memcpy(response_buff + acc, &local_trust_status.status_entries[i].status, sizeof(uint8_t));
-    acc += sizeof(uint8_t);
+    memcpy(response_buff + acc, &local_trust_status.status_entries[i].status, sizeof(int8_t));
+    acc += sizeof(int8_t);
   }
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
