@@ -19,10 +19,10 @@ int get_index_from_digest(STATUS_TABLE *status_table, uint8_t digest[SHA256_DIGE
 
 // heartbeat --> NULL to my_local_status, nodes_number = full (ex 4 = have received 4 local trust status)
 int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number) {
-    int consensous_rule = ((nodes_number - 1) / 2) + 1;
+    int consensous_rule = ((nodes_number) / 2) + 1;
     int i, j, inserted_global = 0, k;
 
-    fprintf(stdout, "Consensous rule: %d\n", consensous_rule);
+    fprintf(stdout, "Consensous rule: sum(T) >= %d\n", consensous_rule);
 
     // prepare the global table
     for(i = 0; i < nodes_number; i++) {
@@ -48,7 +48,7 @@ int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_lo
 
     // Last pass on global
     for(i = 0; i < global_trust_status->number_of_entries; i++) {
-        if(global_trust_status->status_entries[i].status > consensous_rule)
+        if(global_trust_status->status_entries[i].status >= consensous_rule)
             global_trust_status->status_entries[i].status = 1;
         else 
             global_trust_status->status_entries[i].status = 0;
