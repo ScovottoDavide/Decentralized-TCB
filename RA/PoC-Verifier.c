@@ -229,6 +229,7 @@ void PoC_Verifier(void *input){
   }
   for(i = 0; i < nodes_number; i++)
     local_trust_status.status_entries[i].status = 1;
+  local_trust_status.number_of_entries = nodes_number;
 
   fprintf(stdout, "\n Reading...\n");
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
@@ -237,7 +238,6 @@ void PoC_Verifier(void *input){
       expected_size+=32;
       have_to_read = 1;
 
-      local_trust_status.number_of_entries = nodes_number;
       for(i = 0; i < nodes_number; i++){
         ch_read_attest[i].recv_bytes = 0;
         ch_read_attest[i].recv_msg = 0;
@@ -330,8 +330,7 @@ void PoC_Verifier(void *input){
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
           fprintf(stdout, "Sending local trust status results... \n");
-          //sendRAresponse(&ch_write_response, ver_response, nodes_number);
-          sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number);
+          sendLocalTrustStatus(&ch_write_response, local_trust_status, local_trust_status.number_of_entries);
           have_to_read = 0;
           for(j = 0; j < nodes_number; j++){
             verified_nodes[j] = 0;
@@ -533,7 +532,7 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
 
   bytes_to_send += sizeof(uint16_t);
   bytes_to_send += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-  for(i = 0; i < nodes_number; i++) {
+  for(i = 0; i < nodes_number && local_trust_status.status_entries[i].status != 2; i++) {
     bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(uint8_t);
   }
   bytes_to_send += sizeof last;
@@ -548,7 +547,7 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   acc += sizeof(uint16_t);
   memcpy(response_buff + acc, &local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
   acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-  for(i = 0; i < nodes_number; i++){
+  for(i = 0; i < nodes_number && local_trust_status.status_entries[i].status != 2; i++){
     memcpy(response_buff + acc, &local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
     acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
     memcpy(response_buff + acc, &local_trust_status.status_entries[i].status, sizeof(uint8_t));
