@@ -229,7 +229,6 @@ void PoC_Verifier(void *input){
   }
   for(i = 0; i < nodes_number; i++)
     local_trust_status.status_entries[i].status = 1;
-  local_trust_status.number_of_entries = nodes_number;
 
   fprintf(stdout, "\n Reading...\n");
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
@@ -238,6 +237,7 @@ void PoC_Verifier(void *input){
       expected_size+=32;
       have_to_read = 1;
 
+      local_trust_status.number_of_entries = nodes_number;
       for(i = 0; i < nodes_number; i++){
         ch_read_attest[i].recv_bytes = 0;
         ch_read_attest[i].recv_msg = 0;
