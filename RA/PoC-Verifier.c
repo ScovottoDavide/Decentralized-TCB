@@ -95,7 +95,7 @@ void menu(void *in) {
 void PoC_Verifier(void *input){
   int nodes_number = ((ARGS *)input)->nodes_number;
   const char *file_index_path_name = ((ARGS *)input)->index_file_path_name;
-  int i, j, *verified_nodes;
+  int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
   STATUS_TABLE local_trust_status;
@@ -136,6 +136,9 @@ void PoC_Verifier(void *input){
   offset = malloc(nodes_number * sizeof(uint32_t));
   previous_msg_num = malloc(nodes_number * sizeof(uint16_t));
   verified_nodes = calloc(nodes_number, sizeof(int));
+  attest_messages_sizes = malloc(nodes_number * sizeof(int));
+
+  for(i = 0; i < nodes_number; i++) attest_messages_sizes[i] = 1024 * 100 * 2;
 
   for(i = 0; i < nodes_number; i++){
     pcrs_mem[i].pcr10_sha1 = calloc((SHA_DIGEST_LENGTH + 1), sizeof(unsigned char));
@@ -220,7 +223,7 @@ void PoC_Verifier(void *input){
 
   read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
   for(i = 0; i < nodes_number; i++)
-    read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
+    read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * attest_messages_sizes[i]);
   
   // Initialize local trust status --> all T before verifying them
    if(!get_my_ak_digest(local_trust_status.from_ak_digest)) {
@@ -255,9 +258,17 @@ void PoC_Verifier(void *input){
           if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
             memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
             offset[i] += DATA_SIZE;
+            if(offset[i] > attest_messages_sizes[i]){
+              attest_messages_sizes[i] += attest_messages_size_increment;
+              read_attest_message[i] = realloc(read_attest_message[i], attest_messages_sizes[i] * sizeof(uint8_t));
+            }
             previous_msg_num[i] += 1;
           } 
           else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
+            if(ch_read_attest[i].recv_bytes < attest_messages_sizes[i]){
+              attest_messages_sizes[i] = ch_read_attest[i].recv_bytes;
+              read_attest_message[i] = realloc(read_attest_message[i], attest_messages_sizes[i] * sizeof(uint8_t));
+            }
             parseTPAdata(TpaData, read_attest_message[i], i);
             //fprintf(stdout, "\tNew quote from [%d bytes]: ", ch_read_attest[i].recv_bytes); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
             have_to_read += 1;
@@ -386,8 +397,8 @@ early_end:
   }
   free(pcrs_mem);
   free(pcr9_sha1); free(pcr9_sha256);
-  free(ch_read_attest); free(ch_read_ak); free(ch_read_whitelist);
-  free(read_indexes); free(read_indexes_AkPub); free(read_indexes_whitelist);
+  free(ch_read_attest); free(ch_read_ak); free(ch_read_whitelist); free(ch_read_status);
+  free(read_indexes); free(read_indexes_AkPub); free(read_indexes_whitelist); free(read_indexes_status);
   free(ak_files);
   free(offset); free(previous_msg_num);
   free(verified_nodes);
