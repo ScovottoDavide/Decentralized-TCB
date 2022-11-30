@@ -11,6 +11,7 @@ typedef struct {
 
 typedef struct {
   uint16_t number_of_entries;
+  uint8_t from_ak_digest[SHA256_DIGEST_LENGTH+1];
   STATUS_ENTRY *status_entries;
 }STATUS_TABLE;
 

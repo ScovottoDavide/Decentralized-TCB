@@ -10,6 +10,7 @@
 #define NONCE_LEN 32
 
 void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number);
+bool checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
 void menu(void *in);
 void PoC_heartbeat(void *nodes_number_p);
 bool legal_int(const char *str);
@@ -90,7 +91,7 @@ void PoC_heartbeat(void *nodes_number_p) {
     STATUS_TABLE *read_local_trust_status, global_trust_status;
 	
     FILE *index_file;
-    int len_file, i, new_nonce_send = 1, received_responses = 0, *responses_map, max_number_trust_entries = 0;
+    int len_file, i, new_nonce_send = 1, received_responses = 0, *responses_map, max_number_trust_entries = 0, nt_nodes = 0;
     char *data = NULL, prefix_str_index[12]="read_index_", prefix_str_pubK[9]="pub_key_", buf_index_str[100] = {0};
 
     IOTA_Index file_index, *read_response_indexes;
@@ -202,6 +203,8 @@ void PoC_heartbeat(void *nodes_number_p) {
                         }
                         else{
                             fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
+                            if(checkNT_in_froms(global_trust_status.status_entries[j].ak_digest, read_local_trust_status, nodes_number))
+                                nt_nodes += 1;
                         }
                     }
                     fprintf(stdout, "All responses arrived! Start new cicle.\n");
@@ -209,6 +212,8 @@ void PoC_heartbeat(void *nodes_number_p) {
                     received_responses = 0;
                     for(int j = 0; j < nodes_number; j++)
                         responses_map[j] = 0;
+                    nodes_number -= nt_nodes;
+                    nt_nodes = 0;
                     if(ch_send.sent_bytes >= 32)
                         sleep(10);
                 }
@@ -252,7 +257,9 @@ void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *rea
 
     memcpy(&read_local_trust_status[node_number].number_of_entries, read_trust_message + acc, sizeof(uint16_t));
     acc += sizeof(uint16_t);
-    
+    memcpy(read_local_trust_status[node_number].from_ak_digest, read_trust_message + acc, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+    acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
+
     read_local_trust_status[node_number].status_entries = malloc(read_local_trust_status[node_number].number_of_entries * sizeof(STATUS_ENTRY));
 
     for(i = 0; i < read_local_trust_status[node_number].number_of_entries; i++) {
@@ -262,5 +269,14 @@ void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *rea
         memcpy(&read_local_trust_status[node_number].status_entries[i].status, read_trust_message + acc, sizeof(uint8_t));
         acc += sizeof(uint8_t);
     }
+}
+
+// If true decrease nodes_number else do not
+bool checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number) {
+    int i;
+    for(i = 0; i < nodes_number; i++)
+        if(memcmp(global_digest, read_trust_local_status[i].from_ak_digest, SHA256_DIGEST_LENGTH) == 0)
+            return true;
+    return false;
 }
 

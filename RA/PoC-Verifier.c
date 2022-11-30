@@ -10,9 +10,9 @@
 #include "../Consensous/consensous.h"
 
 bool legal_int(const char *str);
-void hex_print(uint8_t *raw_data, size_t raw_size);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
+bool get_my_ak_digest(uint8_t *my_ak_digest);
 bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
             TO_SEND TpaData, int nodes_number);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *read_indexes, 
@@ -110,6 +110,7 @@ void PoC_Verifier(void *input){
 	
   uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset;
 	uint8_t ret = 0, **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
+  uint8_t my_ak_digest[SHA256_DIGEST_LENGTH+1];
   uint16_t *previous_msg_num;
 
   unsigned char *pcr9_sha1 = NULL, *pcr9_sha256 = NULL;
@@ -217,15 +218,19 @@ void PoC_Verifier(void *input){
   // Each node/TPA is recognized thanks to the hash of the public key read from the previous step
   // Read the whitelist from the tangle! So every TPA has to upload its whitelist before the process starts
 
-  fprintf(stdout, "\n Reading...\n");
   read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
   for(i = 0; i < nodes_number; i++)
     read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * (1024 * 100 * 2));
   
   // Initialize local trust status --> all T before verifying them
+   if(!get_my_ak_digest(local_trust_status.from_ak_digest)) {
+    fprintf(stdout, "Could not calculate my ak digest\n");
+    goto early_end;
+  }
   for(i = 0; i < nodes_number; i++)
     local_trust_status.status_entries[i].status = 1;
 
+  fprintf(stdout, "\n Reading...\n");
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
       // new nonce arrived --> read new attestations
@@ -527,6 +532,7 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   uint8_t last[4] = "done", *response_buff = NULL;
 
   bytes_to_send += sizeof(uint16_t);
+  bytes_to_send += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
   for(i = 0; i < nodes_number; i++) {
     bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(uint8_t);
   }
@@ -540,6 +546,8 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
 
   memcpy(response_buff + acc, &local_trust_status.number_of_entries, sizeof(uint16_t));
   acc += sizeof(uint16_t);
+  memcpy(response_buff + acc, &local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+  acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
   for(i = 0; i < nodes_number; i++){
     memcpy(response_buff + acc, &local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
     acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
@@ -600,6 +608,25 @@ void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, i
   fprintf(stdout, "DONE WRITING - Sent bytes = %d\n", bytes_to_send);
   
   free(response_buff);
+}
+
+bool get_my_ak_digest(uint8_t *my_ak_digest) {
+  unsigned char *akPub = NULL;
+  unsigned char *digest = NULL;
+
+  bool res = openAKPub("/etc/tc/ak.pub.pem", &akPub);
+  if(!res) {
+    fprintf(stderr, "Could not read AK pub\n");
+    return false;
+  }
+
+  digest = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
+  int md_len = computeDigestEVP(akPub, "sha256", digest);
+  if(md_len <= 0)
+    return false;
+  memcpy(my_ak_digest, digest, md_len);
+  my_ak_digest[md_len] = '\0';
+  return true;
 }
 
 bool openAKPub(const char *path, unsigned char **akPub) {
@@ -696,11 +723,4 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
   free(digest_sha256);
   // do not free ak_path because it points to the actual path, otherwise it will free the actual data and the so it will be lost
   return true;
-}
-
-void hex_print(uint8_t *raw_data, size_t raw_size){
-  int i;
-
-  for(i = 0; i < raw_size; i++)
-    fprintf(stdout, "%02X", raw_data[i]);
 }
