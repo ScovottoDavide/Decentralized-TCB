@@ -336,10 +336,10 @@ void PoC_Verifier(void *input){
             verified_nodes[j] = 0;
             if(local_trust_status.status_entries[j].status == 0){
               nodes_number -= 1;
-              local_trust_status.status_entries[j].status = 2;
+              local_trust_status.status_entries[j].status = -1;
             }
           }
-          // Get other RAs's local status 
+          // Get other RAs's local status to construct global trust status
         }
       }
       if((i + 1) == nodes_number) i = 0;
