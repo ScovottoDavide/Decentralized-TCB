@@ -23,7 +23,7 @@ int get_consensus_rule(int nodes_number) {
 
 // heartbeat --> NULL to my_local_status, nodes_number = full (ex 4 = have received 4 local trust status)
 int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number) {
-    int i, j, inserted_global = 0, k, index_is_nt;
+    int i, j, inserted_global = 0, k, index_is_nt, nt_nodes = 0;
     int *nt_array = calloc(nodes_number, sizeof(int)); 
     
     int consensus_rule = get_consensus_rule(nodes_number);
@@ -57,13 +57,13 @@ int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_lo
     for(i = 0; i < nodes_number; i++) {
         if(nt_array[i] >= consensus_rule){
             global_trust_status->status_entries[i].status = -1; // tag the node id as already NT
-            nodes_number -= 1;
-            fprintf(stdout, "Detected NT Node!\n");
+            nt_nodes +=1;
+            fprintf(stdout, "Detected NT Node! ID: "); hex_print(global_trust_status->status_entries[i].ak_digest, 32); fprintf(stdout, "\n");
         }
     }
 
     // Get new consensus rule
-    consensus_rule = get_consensus_rule(nodes_number);
+    consensus_rule = get_consensus_rule(nodes_number - nt_nodes);
     fprintf(stdout, "Consensous rule: sum(T) >= %d\n", consensus_rule);
 
     // Calculate overall trust
@@ -75,16 +75,19 @@ int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_lo
         }
         if(global_trust_status->status_entries[index_is_nt].status != -1){
             for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
-            k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
-            if(k >= 0){
-                if(others_local_trust_status[i].status_entries[j].status == 1)
-                    global_trust_status->status_entries[k].status += 1;
+                k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
+                if(k >= 0){
+                    if(others_local_trust_status[i].status_entries[j].status == 1)
+                        global_trust_status->status_entries[k].status += 1;
                 }
             }
-        } else {
-            fprintf(stdout, "untrusted %s\n", global_trust_status->status_entries[index_is_nt].ak_digest);
         }
     }
+
+    /*for(i = 0; i < global_trust_status->number_of_entries; i++) {
+        fprintf(stdout, "Node ID: "); hex_print(global_trust_status->status_entries[i].ak_digest, SHA256_DIGEST_LENGTH); 
+        fprintf(stdout, " --> %d\n", global_trust_status->status_entries[i].status);
+    }*/
 
     // Last pass on global
     for(i = 0; i < global_trust_status->number_of_entries; i++) {
