@@ -97,7 +97,7 @@ void menu(void *in) {
 void PoC_Verifier(void *input){
   int nodes_number = ((ARGS *)input)->nodes_number;
   const char *file_index_path_name = ((ARGS *)input)->index_file_path_name;
-  int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024 * 10, index_is_nt = 0;
+  int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024 * 10, *invalid_channels, invalid_table_index;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
   STATUS_TABLE local_trust_status, *read_local_trust_status, global_trust_status;
@@ -140,6 +140,7 @@ void PoC_Verifier(void *input){
   previous_msg_num = malloc(nodes_number * sizeof(uint16_t));
   verified_nodes = calloc(nodes_number, sizeof(int));
   attest_messages_sizes = malloc(nodes_number * sizeof(int));
+  invalid_channels = calloc(nodes_number, sizeof(int));
 
   for(i = 0; i < nodes_number; i++) attest_messages_sizes[i] = 1024 * 100 * 2;
 
@@ -256,7 +257,7 @@ void PoC_Verifier(void *input){
     }
     i = 0;
     while(have_to_read > 0){
-      if(verified_nodes[i] == 0 && local_trust_status.status_entries[i].status >= 0){ 
+      if(verified_nodes[i] == 0 && invalid_channels[i] != 1){ 
         if(!WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message)){            
           if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
             memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
@@ -343,17 +344,10 @@ void PoC_Verifier(void *input){
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
           fprintf(stdout, "Sending local trust status results... \n");
-          sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number);
-          have_to_read = 0;
-          for(j = 0; j < nodes_number; j++){
-            verified_nodes[j] = 0;
-            if(local_trust_status.status_entries[j].status == 0){
-              local_trust_status.status_entries[j].status = -1;
-            }
-          }
+          sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number + 1);
           // Get other RAs's local status to construct global trust status
           readOthersTrustTables(ch_read_status, nodes_number, read_local_trust_status, local_trust_status, &global_trust_status);
-          consensous_proc(read_local_trust_status, &global_trust_status, nodes_number);
+          consensous_proc(read_local_trust_status, &global_trust_status, nodes_number + 1);
           fprintf(stdout, "Consensous result: \n");
           for(j = 0; j < global_trust_status.number_of_entries; j++){
               if(global_trust_status.status_entries[j].status == 1) {
@@ -367,9 +361,16 @@ void PoC_Verifier(void *input){
                   }   
               }
           }
+          have_to_read = 0;
+          for(j = 0; j < nodes_number; j++){
+            verified_nodes[j] = 0;
+            if(local_trust_status.status_entries[j].status == 0){
+              local_trust_status.status_entries[j].status = -1;
+            }
+          }
         }
       } else {
-        if(verified_nodes[i] == 0 && local_trust_status.status_entries[i].status == -1){ 
+        if(verified_nodes[i] == 0 && invalid_channels[i] == 1){ 
           verified_nodes[i] = 1;
           have_to_read+=1;
         }
@@ -424,7 +425,11 @@ early_end:
   free(offset); free(previous_msg_num);
   free(verified_nodes);
   free(local_trust_status.status_entries);
+  free(global_trust_status.status_entries);
+  for(i = 0; i < nodes_number + 1; i++) 
+    free(read_local_trust_status[i].status_entries);
   free(read_local_trust_status);
+  free(invalid_channels);
   pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
   if(verifier_status == 0){ // stop
     fprintf(stdout, "Verifier Stopped\n");
@@ -799,6 +804,7 @@ bool readOthersTrustTables(WAM_channel *ch_read_status, int nodes_number, STATUS
 
   read_local_trust_status[nodes_number].number_of_entries = local_trust_status.number_of_entries;
   memcpy(read_local_trust_status[nodes_number].from_ak_digest, local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+  read_local_trust_status[nodes_number].status_entries = malloc(local_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
   for(i = 0; i < read_local_trust_status[nodes_number].number_of_entries; i++){
     read_local_trust_status[nodes_number].status_entries[i].status = local_trust_status.status_entries[i].status;
     memcpy(read_local_trust_status[nodes_number].status_entries[i].ak_digest, local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
@@ -806,8 +812,8 @@ bool readOthersTrustTables(WAM_channel *ch_read_status, int nodes_number, STATUS
 
   if(local_trust_status.number_of_entries > max_number_trust_entries)
     max_number_trust_entries = local_trust_status.number_of_entries;
-  
-  global_trust_status->number_of_entries = max_number_trust_entries;
+
+  global_trust_status->number_of_entries = max_number_trust_entries + 1;
   global_trust_status->status_entries = malloc(global_trust_status->number_of_entries * sizeof(STATUS_ENTRY));
   for(i = 0; i < global_trust_status->number_of_entries; i++)
     global_trust_status->status_entries[i].status = 0;

@@ -82,7 +82,7 @@ int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *globa
                     return -1;    
                 }
             }
-        }else already_nt += 1;
+        } else already_nt += 1;
     }
 
     for(i = 0; i < nodes_number; i++) {
