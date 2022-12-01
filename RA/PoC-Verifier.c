@@ -317,7 +317,6 @@ void PoC_Verifier(void *input){
                 fprintf(stdout, "path: %s %d\n", ver_response[i].untrusted_entries[j].untrusted_path_name, ver_response[i].untrusted_entries[j].name_len);*/
 
             verified_nodes[i] = 1;
-            
             memcpy(local_trust_status.status_entries[i].ak_digest, TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
             local_trust_status.status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
             if(ver_response[i].is_quote_successful == 1 && ver_response[i].number_white_entries == 0)
@@ -543,11 +542,13 @@ void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_numbe
 void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number) {
   size_t acc = 0, bytes_to_send = 0;
   int i, j;
+  uint16_t valid_entries = 0;
   uint8_t last[4] = "done", *response_buff = NULL;
 
   bytes_to_send += sizeof(uint16_t);
   bytes_to_send += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
   for(i = 0; i < nodes_number && local_trust_status.status_entries[i].status != -1; i++) {
+    valid_entries+=1;
     bytes_to_send += (SHA256_DIGEST_LENGTH * sizeof(uint8_t)) + sizeof(int8_t);
   }
   bytes_to_send += sizeof last;
@@ -558,7 +559,7 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
     return ;
   }
 
-  memcpy(response_buff + acc, &local_trust_status.number_of_entries, sizeof(uint16_t));
+  memcpy(response_buff + acc, &valid_entries, sizeof(uint16_t));
   acc += sizeof(uint16_t);
   memcpy(response_buff + acc, &local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
   acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
