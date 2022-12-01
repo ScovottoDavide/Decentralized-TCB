@@ -23,35 +23,38 @@ int get_consensus_rule(int nodes_number) {
 
 // heartbeat --> NULL to my_local_status, nodes_number = full (ex 4 = have received 4 local trust status)
 int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number) {
-    int i, j, inserted_global = 0, k, index_is_nt, nt_nodes = 0;
+    int i, j, inserted_global = 0, k, index_is_nt, nt_nodes = 0, already_nt = 0;
     int *nt_array = calloc(nodes_number, sizeof(int)); 
     
     int consensus_rule = get_consensus_rule(nodes_number);
-    fprintf(stdout, "Consensous rule: sum(T) >= %d\n", consensus_rule);
 
     // prepare the global table
     for(i = 0; i < nodes_number; i++) {
-        for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
-            if(get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest) == -1){
-                memcpy(global_trust_status->status_entries[inserted_global].ak_digest, others_local_trust_status[i].status_entries[j].ak_digest, SHA256_DIGEST_LENGTH);
-                global_trust_status->status_entries[inserted_global].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
-                inserted_global += 1;
+        if(others_local_trust_status[i].status_entries != NULL){
+            for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
+                if(get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest) == -1){
+                    memcpy(global_trust_status->status_entries[inserted_global].ak_digest, others_local_trust_status[i].status_entries[j].ak_digest, SHA256_DIGEST_LENGTH);
+                    global_trust_status->status_entries[inserted_global].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+                    inserted_global += 1;
+                }
             }
         }
     }
 
     // Detect untrusted tables
     for(i = 0; i < nodes_number; i++) {
-        for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
-            k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
-            if(k >= 0){
-                if(others_local_trust_status[i].status_entries[j].status == 0)
-                    nt_array[k] += 1;
-            } else {
-                fprintf(stdout, "Node ID unkown\n");
-                return -1;    
+        if(others_local_trust_status[i].status_entries != NULL){
+            for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
+                k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
+                if(k >= 0){
+                    if(others_local_trust_status[i].status_entries[j].status == 0)
+                        nt_array[k] += 1;
+                } else {
+                    fprintf(stdout, "Node ID unkown\n");
+                    return -1;    
+                }
             }
-        }
+        }else already_nt += 1;
     }
 
     for(i = 0; i < nodes_number; i++) {
@@ -63,22 +66,23 @@ int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_lo
     }
 
     // Get new consensus rule
-    consensus_rule = get_consensus_rule(nodes_number - nt_nodes);
-    fprintf(stdout, "Consensous rule: sum(T) >= %d\n", consensus_rule);
+    consensus_rule = get_consensus_rule(nodes_number - nt_nodes - already_nt);
 
     // Calculate overall trust
     for(i = 0; i < nodes_number; i++) {
-        index_is_nt = get_index_from_digest(global_trust_status, others_local_trust_status[i].from_ak_digest);
-        if(index_is_nt == -1) {
-            fprintf(stdout, "Author of local trust status unkown\n");
-            return -1;
-        }
-        if(global_trust_status->status_entries[index_is_nt].status != -1){
-            for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
-                k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
-                if(k >= 0){
-                    if(others_local_trust_status[i].status_entries[j].status == 1)
-                        global_trust_status->status_entries[k].status += 1;
+        if(others_local_trust_status[i].status_entries != NULL){
+            index_is_nt = get_index_from_digest(global_trust_status, others_local_trust_status[i].from_ak_digest);
+            if(index_is_nt == -1) {
+                fprintf(stdout, "Author of local trust status unkown\n");
+                return -1;
+            }
+            if(global_trust_status->status_entries[index_is_nt].status != -1){
+                for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
+                    k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
+                    if(k >= 0){
+                        if(others_local_trust_status[i].status_entries[j].status == 1)
+                            global_trust_status->status_entries[k].status += 1;
+                    }
                 }
             }
         }

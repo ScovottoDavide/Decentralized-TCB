@@ -10,7 +10,7 @@
 #define NONCE_LEN 32
 
 void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number);
-bool checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
+int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
 void menu(void *in);
 void PoC_heartbeat(void *nodes_number_p);
 bool legal_int(const char *str);
@@ -91,7 +91,8 @@ void PoC_heartbeat(void *nodes_number_p) {
     STATUS_TABLE *read_local_trust_status, global_trust_status;
 	
     FILE *index_file;
-    int len_file, i, j, new_nonce_send = 1, received_responses = 0, *responses_map, max_number_trust_entries = 0, nt_nodes = 0;
+    int len_file, i, j, new_nonce_send = 1, received_responses = 0, *responses_map, max_number_trust_entries = 0;
+    int *invalid_channels, invalid_table_index = 0;
     char *data = NULL, prefix_str_index[12]="read_index_", prefix_str_pubK[9]="pub_key_", buf_index_str[100] = {0};
 
     IOTA_Index file_index, *read_response_indexes;
@@ -149,6 +150,7 @@ void PoC_heartbeat(void *nodes_number_p) {
     responses_map = calloc(nodes_number, sizeof(int));
 
     read_local_trust_status = malloc(nodes_number * sizeof(STATUS_TABLE));
+    invalid_channels = calloc(nodes_number, sizeof(int));
 
     while(1){
         if(new_nonce_send){
@@ -173,7 +175,7 @@ void PoC_heartbeat(void *nodes_number_p) {
         }
         i = 0;
         while(received_responses < nodes_number && !new_nonce_send){
-            if(responses_map[i] == 0 && i < nodes_number){
+            if(responses_map[i] == 0 && i < nodes_number && invalid_channels[i] != 1){
                 if(!WAM_read(&ch_read_responses[i], expected_response_messages, &expected_response_size)){
                     if(ch_read_responses[i].recv_msg != previous_msg_num[i]){
                         memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);
@@ -182,8 +184,7 @@ void PoC_heartbeat(void *nodes_number_p) {
                     }
                     else if(memcmp(last, read_response_messages[i] + ch_read_responses[i].recv_bytes - sizeof last, sizeof last) == 0) {
                         parseLocalTrustStatusMessage(read_response_messages[i], read_local_trust_status, i);
-                        fprintf(stdout, "New response arrived of bytes [%d] from ", ch_read_responses[i].recv_bytes);
-                        hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, " entries: %d\n", read_local_trust_status[i].number_of_entries);
+                        fprintf(stdout, "New response arrived of bytes [%d] from ", ch_read_responses[i].recv_bytes); hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, "\n");
                         if(read_local_trust_status[i].number_of_entries > max_number_trust_entries)
                             max_number_trust_entries = read_local_trust_status[i].number_of_entries;
                         received_responses+=1;
@@ -202,11 +203,13 @@ void PoC_heartbeat(void *nodes_number_p) {
                     for(j = 0; j < global_trust_status.number_of_entries; j++){
                         if(global_trust_status.status_entries[j].status == 1) {
                             fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> T\n");
-                        }
-                        else{
+                        } else{
                             fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
-                            if(checkNT_in_froms(global_trust_status.status_entries[j].ak_digest, read_local_trust_status, nodes_number))
-                                nt_nodes += 1;
+                            invalid_table_index = checkNT_in_froms(global_trust_status.status_entries[j].ak_digest, read_local_trust_status, nodes_number);
+                            if(invalid_table_index >= 0){
+                                invalid_channels[invalid_table_index] = 1;
+                                read_local_trust_status[invalid_table_index].status_entries = NULL;
+                            }   
                         }
                     }
                     fprintf(stdout, "All responses arrived! Start new cicle.\n");
@@ -214,11 +217,14 @@ void PoC_heartbeat(void *nodes_number_p) {
                     received_responses = 0;
                     for(j = 0; j < nodes_number; j++)
                         responses_map[j] = 0;
-                    nodes_number -= nt_nodes;
-                    nt_nodes = 0;
                     free(global_trust_status.status_entries);
                     if(ch_send.sent_bytes >= 32)
                         sleep(10);
+                }
+            } else {
+                if(responses_map[i] == 0 && invalid_channels[i] == 1){
+                    responses_map[i] = 1;
+                    received_responses+=1;
                 }
             }
             if(i + 1 == nodes_number) i = 0;
@@ -242,6 +248,7 @@ end:
     if(data != NULL) free(data);
     if(ch_read_responses != NULL) free(ch_read_responses);
     if(read_response_indexes!= NULL) free(read_response_indexes);
+    if(invalid_channels != NULL) free(invalid_channels);
     if(json != NULL) cJSON_Delete(json);
 early_end:
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
@@ -275,11 +282,11 @@ void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *rea
 }
 
 // If true decrease nodes_number else do not
-bool checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number) {
+int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number) {
     int i;
     for(i = 0; i < nodes_number; i++)
         if(memcmp(global_digest, read_trust_local_status[i].from_ak_digest, SHA256_DIGEST_LENGTH) == 0)
-            return true;
-    return false;
+            return i;
+    return -1;
 }
 
