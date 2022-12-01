@@ -18,5 +18,6 @@ typedef struct {
 void hex_print(uint8_t *raw_data, size_t raw_size);
 int get_index_from_digest(STATUS_TABLE *status_table, uint8_t digest[SHA256_DIGEST_LENGTH+1]);
 void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number);
+int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
 int get_consensus_rule(int nodes_number);
-int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number);
+int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number);

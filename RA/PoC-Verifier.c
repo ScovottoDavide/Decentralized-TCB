@@ -20,6 +20,8 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number);
 void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
+bool readOthersTrustTables(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE *read_local_trust_status, STATUS_TABLE local_trust_status,
+      STATUS_TABLE *global_trust_status);
 
 typedef struct {
   const char *index_file_path_name;
@@ -98,7 +100,7 @@ void PoC_Verifier(void *input){
   int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024 * 10, index_is_nt = 0;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
-  STATUS_TABLE local_trust_status;
+  STATUS_TABLE local_trust_status, *read_local_trust_status, global_trust_status;
   FILE *index_file, **ak_files;
   
   IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index, 
@@ -121,6 +123,7 @@ void PoC_Verifier(void *input){
   whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
   pcrs_mem = malloc(nodes_number * sizeof(PCRS_MEM));
   local_trust_status.status_entries = malloc(nodes_number * sizeof(STATUS_ENTRY)); 
+  read_local_trust_status = malloc(nodes_number + 1 * sizeof(STATUS_TABLE)); // plus my self. Later merge my local with those read from tangle
 
   ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
   ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
@@ -349,6 +352,21 @@ void PoC_Verifier(void *input){
             }
           }
           // Get other RAs's local status to construct global trust status
+          readOthersTrustTables(ch_read_status, nodes_number, read_local_trust_status, local_trust_status, &global_trust_status);
+          consensous_proc(read_local_trust_status, &global_trust_status, nodes_number);
+          fprintf(stdout, "Consensous result: \n");
+          for(j = 0; j < global_trust_status.number_of_entries; j++){
+              if(global_trust_status.status_entries[j].status == 1) {
+                  fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> T\n");
+              } else{
+                  fprintf(stdout, "Node ID: "); hex_print(global_trust_status.status_entries[j].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
+                  invalid_table_index = checkNT_in_froms(global_trust_status.status_entries[j].ak_digest, read_local_trust_status, nodes_number);
+                  if(invalid_table_index >= 0){
+                      invalid_channels[invalid_table_index] = 1;
+                      read_local_trust_status[invalid_table_index].status_entries = NULL;
+                  }   
+              }
+          }
         }
       } else {
         if(verified_nodes[i] == 0 && local_trust_status.status_entries[i].status == -1){ 
@@ -406,6 +424,7 @@ early_end:
   free(offset); free(previous_msg_num);
   free(verified_nodes);
   free(local_trust_status.status_entries);
+  free(read_local_trust_status);
   pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
   if(verifier_status == 0){ // stop
     fprintf(stdout, "Verifier Stopped\n");
@@ -741,5 +760,57 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
   free(pcr_sha256);
   free(digest_sha256);
   // do not free ak_path because it points to the actual path, otherwise it will free the actual data and the so it will be lost
+  return true;
+}
+
+bool readOthersTrustTables(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE *read_local_trust_status, STATUS_TABLE local_trust_status,
+      STATUS_TABLE *global_trust_status) {
+  uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
+  uint8_t **read_response_messages, expected_response_messages[DATA_SIZE], last[4]="done";
+  int i, max_number_trust_entries = 0;
+
+  read_response_messages = (uint8_t**) malloc(nodes_number * sizeof(uint8_t *));
+  for(i = 0; i<nodes_number; i++)
+    read_response_messages[i] = (uint8_t *) malloc(DATA_SIZE * 2 * sizeof(uint8_t));
+  
+  for(i = 0; i < nodes_number; i++){
+    ch_read_status[i].recv_bytes = 0;
+    ch_read_status[i].recv_msg = 0;
+    offset[i] = 0;
+    previous_msg_num[i] = 0;
+  }
+
+  for(i = 0; i < nodes_number; ) {
+    if(!WAM_read(&ch_read_status[i], expected_response_messages, &expected_response_size)){
+      if(ch_read_status[i].recv_msg != previous_msg_num[i]){
+        memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);
+        offset[i] += DATA_SIZE;
+        previous_msg_num[i] += 1;
+      }
+      else if(memcmp(last, read_response_messages[i] + ch_read_status[i].recv_bytes - sizeof last, sizeof last) == 0) {
+        parseLocalTrustStatusMessage(read_response_messages[i], read_local_trust_status, i);
+        fprintf(stdout, "Read status [%d] from ", ch_read_status[i].recv_bytes); hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, "\n");
+        if(read_local_trust_status[i].number_of_entries > max_number_trust_entries)
+            max_number_trust_entries = read_local_trust_status[i].number_of_entries;
+        i += 1;
+      }
+    }
+  }
+
+  read_local_trust_status[nodes_number].number_of_entries = local_trust_status.number_of_entries;
+  memcpy(read_local_trust_status[nodes_number].from_ak_digest, local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+  for(i = 0; i < read_local_trust_status[nodes_number].number_of_entries; i++){
+    read_local_trust_status[nodes_number].status_entries[i].status = local_trust_status.status_entries[i].status;
+    memcpy(read_local_trust_status[nodes_number].status_entries[i].ak_digest, local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+  }
+
+  if(local_trust_status.number_of_entries > max_number_trust_entries)
+    max_number_trust_entries = local_trust_status.number_of_entries;
+  
+  global_trust_status->number_of_entries = max_number_trust_entries;
+  global_trust_status->status_entries = malloc(global_trust_status->number_of_entries * sizeof(STATUS_ENTRY));
+  for(i = 0; i < global_trust_status->number_of_entries; i++)
+    global_trust_status->status_entries[i].status = 0;
+
   return true;
 }

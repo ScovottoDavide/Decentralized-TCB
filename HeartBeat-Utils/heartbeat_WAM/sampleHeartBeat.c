@@ -197,7 +197,7 @@ void PoC_heartbeat(void *nodes_number_p) {
                     global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
                     for(j = 0; j < global_trust_status.number_of_entries; j++)
                         global_trust_status.status_entries[j].status = 0;
-                    consensous_proc(NULL, read_local_trust_status, &global_trust_status, nodes_number);
+                    consensous_proc(read_local_trust_status, &global_trust_status, nodes_number);
                     fprintf(stdout, "Consensous result: \n");
                     for(j = 0; j < global_trust_status.number_of_entries; j++){
                         if(global_trust_status.status_entries[j].status == 1) {
@@ -260,13 +260,3 @@ early_end:
     pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     return ;
 }
-
-// If true decrease nodes_number else do not
-int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number) {
-    int i;
-    for(i = 0; i < nodes_number; i++)
-        if(memcmp(global_digest, read_trust_local_status[i].from_ak_digest, SHA256_DIGEST_LENGTH) == 0)
-            return i;
-    return -1;
-}
-

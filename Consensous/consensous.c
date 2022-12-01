@@ -36,12 +36,21 @@ void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *rea
     }
 }
 
+int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number) {
+    int i;
+    for(i = 0; i < nodes_number; i++)
+        if(memcmp(global_digest, read_trust_local_status[i].from_ak_digest, SHA256_DIGEST_LENGTH) == 0)
+            return i;
+    return -1;
+}
+
+
 int get_consensus_rule(int nodes_number) {
     return ((nodes_number) / 2) + 1;
 }
 
 // heartbeat --> NULL to my_local_status, nodes_number = full (ex 4 = have received 4 local trust status)
-int consensous_proc(STATUS_TABLE *my_local_trust_status, STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number) {
+int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *global_trust_status, int nodes_number) {
     int i, j, inserted_global = 0, k, index_is_nt, nt_nodes = 0, already_nt = 0;
     int *nt_array = calloc(nodes_number, sizeof(int)); 
     
