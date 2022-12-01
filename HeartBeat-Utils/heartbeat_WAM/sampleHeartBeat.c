@@ -9,7 +9,6 @@
 
 #define NONCE_LEN 32
 
-void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number);
 int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
 void menu(void *in);
 void PoC_heartbeat(void *nodes_number_p);
@@ -260,25 +259,6 @@ early_end:
     }
     pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
     return ;
-}
-
-void parseLocalTrustStatusMessage(uint8_t *read_trust_message, STATUS_TABLE *read_local_trust_status, int node_number) {
-    int acc = 0, i;
-
-    memcpy(&read_local_trust_status[node_number].number_of_entries, read_trust_message + acc, sizeof(uint16_t));
-    acc += sizeof(uint16_t);
-    memcpy(read_local_trust_status[node_number].from_ak_digest, read_trust_message + acc, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
-    acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-
-    read_local_trust_status[node_number].status_entries = malloc(read_local_trust_status[node_number].number_of_entries * sizeof(STATUS_ENTRY));
-
-    for(i = 0; i < read_local_trust_status[node_number].number_of_entries; i++) {
-        memcpy(read_local_trust_status[node_number].status_entries[i].ak_digest, read_trust_message + acc, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
-        read_local_trust_status[node_number].status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
-        acc += SHA256_DIGEST_LENGTH * sizeof(uint8_t);
-        memcpy(&read_local_trust_status[node_number].status_entries[i].status, read_trust_message + acc, sizeof(int8_t));
-        acc += sizeof(int8_t);
-    }
 }
 
 // If true decrease nodes_number else do not
