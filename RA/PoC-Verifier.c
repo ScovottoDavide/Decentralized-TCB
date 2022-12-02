@@ -344,7 +344,7 @@ void PoC_Verifier(void *input){
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
           fprintf(stdout, "Sending local trust status results... \n");
-          sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number + 1);
+          sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number);
           // Get other RAs's local status to construct global trust status
           readOthersTrustTables(ch_read_status, nodes_number, read_local_trust_status, local_trust_status, &global_trust_status);
           consensous_proc(read_local_trust_status, &global_trust_status, nodes_number + 1);
@@ -361,6 +361,7 @@ void PoC_Verifier(void *input){
                   }   
               }
           }
+          free(global_trust_status.status_entries);
           have_to_read = 0;
           for(j = 0; j < nodes_number; j++){
             verified_nodes[j] = 0;
@@ -411,6 +412,10 @@ end:
     free(whitelist_table[i].white_entries);
     free(ver_response[i].untrusted_entries);
   }
+  free(global_trust_status.status_entries);
+  for(i = 0; i < nodes_number + 1; i++) 
+    free(read_local_trust_status[i].status_entries);
+  free(read_local_trust_status);
 early_end:
   free(TpaData); free(ver_response); free(ak_table); free(whitelist_table);
   for(i = 0; i < nodes_number; i++){
@@ -425,10 +430,6 @@ early_end:
   free(offset); free(previous_msg_num);
   free(verified_nodes);
   free(local_trust_status.status_entries);
-  free(global_trust_status.status_entries);
-  for(i = 0; i < nodes_number + 1; i++) 
-    free(read_local_trust_status[i].status_entries);
-  free(read_local_trust_status);
   free(invalid_channels);
   pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
   if(verifier_status == 0){ // stop
