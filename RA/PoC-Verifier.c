@@ -830,7 +830,8 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
   for(j = 0; j < global_trust_status.number_of_entries; j++)
     global_trust_status.status_entries[j].status = 0;
-  if(ret = consensous_proc(read_local_trust_status, &global_trust_status, nodes_number + 1) == 0)
+  ret = consensous_proc(read_local_trust_status, &global_trust_status, nodes_number + 1);
+  if(ret == 0)
     goto exit;
   fprintf(stdout, "Consensous result: \n");
   for(j = 0; j < global_trust_status.number_of_entries; j++){
