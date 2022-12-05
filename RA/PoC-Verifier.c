@@ -790,27 +790,41 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
     } else {
       if(invalid_channels_status[i] == 1 && already_read[i] == 0){
         already_read[i] = 1;
+        read_local_trust_status[i].status_entries = NULL;
         i+=1;
       }
     }
-  }
-
-  read_local_trust_status[nodes_number].number_of_entries = local_trust_status.number_of_entries;
-  memcpy(read_local_trust_status[nodes_number].from_ak_digest, local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
-  read_local_trust_status[nodes_number].from_ak_digest[SHA256_DIGEST_LENGTH] = '\0';
-  read_local_trust_status[nodes_number].status_entries = malloc(local_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
-  for(i = 0; i < read_local_trust_status[nodes_number].number_of_entries; i++){
-    read_local_trust_status[nodes_number].status_entries[i].status = local_trust_status.status_entries[i].status;
-    memcpy(read_local_trust_status[nodes_number].status_entries[i].ak_digest, local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
-    read_local_trust_status[nodes_number].status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
   }
 
   for(i = 0; i < local_trust_status.number_of_entries; i++)
     if(local_trust_status.status_entries[i].status != -1)
       valid_local_entries+=1;
   if(valid_local_entries > max_number_trust_entries)
-    max_number_trust_entries = local_trust_status.number_of_entries;
-  
+    max_number_trust_entries = valid_local_entries;
+
+  read_local_trust_status[nodes_number].number_of_entries = valid_local_entries;
+  memcpy(read_local_trust_status[nodes_number].from_ak_digest, local_trust_status.from_ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+  read_local_trust_status[nodes_number].from_ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+  read_local_trust_status[nodes_number].status_entries = malloc(valid_local_entries * sizeof(STATUS_ENTRY));
+  for(i = 0; i < read_local_trust_status[nodes_number].number_of_entries; i++){
+    if(read_local_trust_status[nodes_number].status_entries[i].status != -1){
+      read_local_trust_status[nodes_number].status_entries[i].status = local_trust_status.status_entries[i].status;
+      memcpy(read_local_trust_status[nodes_number].status_entries[i].ak_digest, local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH * sizeof(uint8_t));
+      read_local_trust_status[nodes_number].status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+    } 
+  }
+
+  fprintf(stdout, "RESULT: \n");
+  for(i = 0; i < nodes_number + 1; i++) {
+    fprintf(stdout, "From: "); hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, "\n");
+    if(read_local_trust_status[i].status_entries != NULL){
+      for(j = 0; j < read_local_trust_status[i].number_of_entries; j++) {
+        fprintf(stdout, "\tNode ID: "); hex_print(read_local_trust_status[i].status_entries[j].ak_digest, 32);
+        fprintf(stdout, " status %d\n", read_local_trust_status[i].status_entries[j].status);
+      }
+    } else fprintf(stdout, "NULL\n");
+  }
+
   global_trust_status.number_of_entries = max_number_trust_entries + 1;
   global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
   for(j = 0; j < global_trust_status.number_of_entries; j++)
@@ -825,7 +839,6 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
           invalid_table_index = checkNT_in_froms(global_trust_status.status_entries[j].ak_digest, read_local_trust_status, nodes_number);
           if(invalid_table_index >= 0 && invalid_table_index < nodes_number){
             invalid_channels_status[invalid_table_index] = 1;
-            read_local_trust_status[invalid_table_index].status_entries = NULL;
           }
       }
   }

@@ -79,7 +79,7 @@ int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *globa
                     if(others_local_trust_status[i].status_entries[j].status == 0)
                         nt_array[k] += 1;
                 } else {
-                    fprintf(stdout, "Node ID unkown\n");
+                    fprintf(stdout, "Node ID unknown\n");
                     return -1;    
                 }
             }
