@@ -197,5 +197,9 @@ if(res != TSS2_RC_SUCCESS){
            return TSS2_ESYS_RC_BAD_VALUE;
        }
    }
+   res = Esys_FlushContext(ectx, objectHandle);
+    if (res != TSS2_RC_SUCCESS) {
+        return res;
+    }
   return TSS2_RC_SUCCESS;
 }
