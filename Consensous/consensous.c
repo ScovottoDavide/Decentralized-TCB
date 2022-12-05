@@ -80,7 +80,7 @@ int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *globa
                         nt_array[k] += 1;
                 } else {
                     fprintf(stdout, "Node ID unknown\n");
-                    return -1;    
+                    return 0;    
                 }
             }
         } else already_nt += 1;
@@ -103,7 +103,7 @@ int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *globa
             index_is_nt = get_index_from_digest(global_trust_status, others_local_trust_status[i].from_ak_digest);
             if(index_is_nt == -1) {
                 fprintf(stdout, "Author of local trust status unkown\n");
-                return -1;
+                return 0;
             }
             if(global_trust_status->status_entries[index_is_nt].status != -1){
                 for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {

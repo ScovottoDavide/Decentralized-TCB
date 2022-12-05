@@ -334,7 +334,8 @@ void PoC_Verifier(void *input){
           fprintf(stdout, "Sending local trust status results... \n");
           sendLocalTrustStatus(&ch_write_response, local_trust_status, nodes_number);
           // Get other RAs's local status to construct global trust status
-          readOthersTrustTables_Consensus(ch_read_status, nodes_number, local_trust_status, invalid_channels_status);
+          if(!readOthersTrustTables_Consensus(ch_read_status, nodes_number, local_trust_status, invalid_channels_status))
+            goto end;
           have_to_read = 0;
           for(j = 0; j < nodes_number; j++){
             verified_nodes[j] = 0;
@@ -743,7 +744,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
   uint8_t **read_response_messages, expected_response_messages[DATA_SIZE], last[4]="done";
   uint16_t max_number_trust_entries = 0;
-  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0;
+  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0, ret = 1;
   STATUS_TABLE *read_local_trust_status, global_trust_status;
 
   already_read = calloc(nodes_number, sizeof(int));
@@ -829,7 +830,8 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
   for(j = 0; j < global_trust_status.number_of_entries; j++)
     global_trust_status.status_entries[j].status = 0;
-  consensous_proc(read_local_trust_status, &global_trust_status, nodes_number + 1);
+  if(ret = consensous_proc(read_local_trust_status, &global_trust_status, nodes_number + 1) == 0)
+    goto exit;
   fprintf(stdout, "Consensous result: \n");
   for(j = 0; j < global_trust_status.number_of_entries; j++){
       if(global_trust_status.status_entries[j].status == 1) {
@@ -853,5 +855,5 @@ exit:
     if(read_local_trust_status[i].status_entries != NULL) free(read_local_trust_status[i].status_entries);
   free(read_local_trust_status);
   if(global_trust_status.status_entries != NULL) free(global_trust_status.status_entries);
-  return 1;
+  return ret;
 }
