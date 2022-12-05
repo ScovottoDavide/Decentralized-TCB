@@ -743,7 +743,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
   uint8_t **read_response_messages, expected_response_messages[DATA_SIZE], last[4]="done";
   uint16_t max_number_trust_entries = 0;
-  int i=0, j, acc = 0, invalid_table_index, *already_read;
+  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0;
   STATUS_TABLE *read_local_trust_status, global_trust_status;
 
   already_read = calloc(nodes_number, sizeof(int));
@@ -805,7 +805,10 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
     read_local_trust_status[nodes_number].status_entries[i].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
   }
 
-  if(local_trust_status.number_of_entries > max_number_trust_entries)
+  for(i = 0; i < local_trust_status.number_of_entries; i++)
+    if(local_trust_status.status_entries[i].status != -1)
+      valid_local_entries+=1;
+  if(valid_local_entries > max_number_trust_entries)
     max_number_trust_entries = local_trust_status.number_of_entries;
   
   global_trust_status.number_of_entries = max_number_trust_entries + 1;
@@ -826,6 +829,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
           }
       }
   }
+  fprintf(stdout, "\n");
 
 exit:
   free(already_read);
