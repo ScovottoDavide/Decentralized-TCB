@@ -238,14 +238,19 @@ void PoC_Verifier(void *input){
   local_trust_status.number_of_entries = nodes_number;
 
   fprintf(stdout, "\n Reading...\n");
+  int print_nonce = 0;
   while(1){
-    fprintf(stdout, "Waiting nonce from "); hex_print(ch_read_hearbeat.read_idx, INDEX_SIZE); fprintf(stdout, "\n");
+    if(!print_nonce){
+      fprintf(stdout, "Waiting nonce from "); hex_print(ch_read_hearbeat.read_idx, INDEX_SIZE); fprintf(stdout, "\n");
+      print_nonce = 1;
+    }
     WAM_read(&ch_read_hearbeat, nonce, &expected_size);
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
       fprintf(stdout, "Nonce received # %d\n", expected_size / 32);
       // new nonce arrived --> read new attestations
       expected_size+=32;
       have_to_read = 1;
+      print_nonce = 0;
 
       for(i = 0; i < nodes_number; i++){
         ch_read_attest[i].recv_bytes = 0;
