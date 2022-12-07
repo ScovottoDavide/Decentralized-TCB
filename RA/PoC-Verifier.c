@@ -19,7 +19,6 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
     IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, IOTA_Index *read_indexes_status, int nodes_number);
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number);
-void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number);
 int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE local_trust_status, int *invalid_channels_status);
 
 typedef struct {
@@ -572,54 +571,7 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   acc += sizeof last;
 
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "DONE WRITING - Sent bytes = %d\n", bytes_to_send);
-  
-  free(response_buff);
-}
-
-void sendRAresponse(WAM_channel *ch_send, VERIFICATION_RESPONSE *ver_response, int nodes_number){
-  size_t acc = 0, bytes_to_send = 0;
-  int i, j;
-  uint8_t last[4] = "done", *response_buff = NULL;
-  
-  for(i = 0; i < nodes_number; i++){
-    bytes_to_send += (sizeof(uint8_t)*SHA256_DIGEST_LENGTH) + sizeof(uint16_t) + sizeof(uint8_t); // tag + number of untrsuted entries + is_quote_successful
-    for(j = 0; j < ver_response[i].number_white_entries; j++){
-      if(ver_response[i].untrusted_entries[j].name_len > 0 ){
-        bytes_to_send += sizeof(uint16_t);
-        bytes_to_send += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
-      }
-    }
-  }
-  bytes_to_send += sizeof last;
-
-  response_buff = malloc(sizeof(uint8_t) * bytes_to_send);
-  if(response_buff == NULL){
-    fprintf(stdout, "OOM\n");
-    return;
-  }
-
-  for(i = 0; i < nodes_number; i++){
-    memcpy(response_buff + acc, &ver_response[i].ak_digest, sizeof(uint8_t)*SHA256_DIGEST_LENGTH);
-    acc += sizeof(uint8_t)*SHA256_DIGEST_LENGTH;
-    memcpy(response_buff + acc, &ver_response[i].number_white_entries, sizeof(uint16_t));
-    acc += sizeof(uint16_t);
-    memcpy(response_buff + acc, &ver_response[i].is_quote_successful, sizeof(uint8_t));
-    acc += sizeof(uint8_t);
-    for(j = 0; j < ver_response[i].number_white_entries; j++){
-      if(ver_response[i].untrusted_entries[j].name_len > 0 ){
-        memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].name_len, sizeof(uint16_t));
-        acc += sizeof(uint16_t);
-        memcpy(response_buff + acc, &ver_response[i].untrusted_entries[j].untrusted_path_name, ver_response[i].untrusted_entries[j].name_len * sizeof(char));
-        acc += ver_response[i].untrusted_entries[j].name_len * sizeof(char);
-      }
-    }
-  }
-  memcpy(response_buff + acc, last, sizeof last);
-  acc += sizeof last;
-
-  WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "DONE WRITING - Sent bytes = %d\n", bytes_to_send);
+  fprintf(stdout, "DONE WRITING - Sent bytes = %d at ", bytes_to_send); hex_print(ch_send->current_index.index, INDEX_SIZE); fprintf(stdout, "\n");
   
   free(response_buff);
 }
@@ -743,10 +695,11 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
   uint8_t **read_response_messages, expected_response_messages[DATA_SIZE], last[4]="done";
   uint16_t max_number_trust_entries = 0;
-  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0, ret = 1;
+  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0, ret = 1, *read_prints;
   STATUS_TABLE *read_local_trust_status, global_trust_status;
 
   already_read = calloc(nodes_number, sizeof(int));
+  read_prints = calloc(nodes_number, sizeof(int));
   read_response_messages = (uint8_t**) malloc(nodes_number * sizeof(uint8_t *));
   for(i = 0; i < nodes_number; i++)
     read_response_messages[i] = (uint8_t *) malloc(DATA_SIZE * 2 * sizeof(uint8_t));
@@ -766,6 +719,10 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   i = 0;
   while(i != nodes_number) {
     if(invalid_channels_status[i] == 0 && already_read[i] == 0){
+      if(read_prints[i] == 0) {
+        fprintf(stdout, "Reading at "); hex_print(ch_read_status[i].read_idx, INDEX_SIZE); fprintf(stdout, "\n");
+        read_prints[i] = 1;
+      }
       if(!WAM_read(&ch_read_status[i], expected_response_messages, &expected_response_size)){
         if(ch_read_status[i].recv_msg != previous_msg_num[i]){
           memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);
@@ -849,7 +806,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   fprintf(stdout, "\n");
 
 exit:
-  free(already_read);
+  free(already_read); free(read_prints);
   for(i = 0; i < nodes_number; i++)
     free(read_response_messages[i]);
   free(read_response_messages);
