@@ -571,8 +571,9 @@ void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status,
   memcpy(response_buff + acc, last, sizeof last);
   acc += sizeof last;
 
+  fprintf(stdout, "Writing at "); hex_print(ch_send->current_index.index, INDEX_SIZE); fprintf(stdout, "\n");
   WAM_write(ch_send, response_buff, (uint32_t)bytes_to_send, false);
-  fprintf(stdout, "DONE WRITING - Sent bytes = %d at ", bytes_to_send); hex_print(ch_send->current_index.index, INDEX_SIZE); fprintf(stdout, "\n");
+  fprintf(stdout, "DONE WRITING - Sent bytes = %d", bytes_to_send);
   
   free(response_buff);
 }
