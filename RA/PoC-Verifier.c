@@ -240,6 +240,7 @@ void PoC_Verifier(void *input){
   fprintf(stdout, "\n Reading...\n");
   while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
+      fprintf(stdout, "Nonce received # %d\n", expected_size / 32);
       // new nonce arrived --> read new attestations
       expected_size+=32;
       have_to_read = 1;
