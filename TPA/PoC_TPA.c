@@ -624,6 +624,11 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
   memcpy(to_send_data + acc, last, sizeof last);
   acc += sizeof last;
 
+  fprintf(stdout, "Writing at "); hex_print(ch_send->current_index.index, INDEX_SIZE); fprintf(stdout, "\n");
+  fprintf(stdout, "last: ");
+  for(i = acc - sizeof last; i < acc; i++)
+    fprintf(stdout, "%c", to_send_data[i]);
+  fprintf(stdout, "\n");
   WAM_write(ch_send, to_send_data, (uint32_t)bytes_to_send, false);
   fprintf(stdout, "DONE WRITING - Sent bytes = %d, ima = %d\n\n", bytes_to_send, *imaLogBytesSize);
 
