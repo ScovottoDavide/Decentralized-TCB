@@ -701,7 +701,7 @@ bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_
 }
 
 int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE local_trust_status, int *invalid_channels_status) {
-  uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
+  uint32_t expected_response_size = 0, previous_msg_num[nodes_number], offset[nodes_number];
   uint8_t **read_response_messages, expected_response_messages[DATA_SIZE], last[4]="done";
   uint16_t max_number_trust_entries = 0;
   int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0, ret = 1, *read_prints;
@@ -733,12 +733,17 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
         read_prints[i] = 1;
       }
       if(!WAM_read(&ch_read_status[i], expected_response_messages, &expected_response_size)){
-        if(ch_read_status[i].recv_msg != previous_msg_num[i]){
-          memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);
-          offset[i] += DATA_SIZE;
-          previous_msg_num[i] += 1;
+        //if(ch_read_status[i].recv_msg != previous_msg_num[i]){
+        //  memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE*sizeof(uint8_t));
+        //  offset[i] += DATA_SIZE;
+        //  previous_msg_num[i] += 1;
+        //}
+        if(expected_response_size > 0) {
+          memcpy(read_response_messages[i] + offset[i], expected_response_messages, expected_response_size*sizeof(uint8_t));
+          offset[i] += expected_response_size;
+          expected_response_size = 0;
         }
-        else if(memcmp(last, read_response_messages[i] + ch_read_status[i].recv_bytes - sizeof last, sizeof last) == 0) {
+        if(memcmp(last, read_response_messages[i] + ch_read_status[i].recv_bytes - sizeof last, sizeof last) == 0) {
           parseLocalTrustStatusMessage(read_response_messages[i], read_local_trust_status, i);
           fprintf(stdout, "Read status [%d] from ", ch_read_status[i].recv_bytes); hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, "\n");
           if(read_local_trust_status[i].number_of_entries > max_number_trust_entries)
@@ -746,12 +751,13 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
           already_read[i] = 1;
           i+=1;
         }
-        pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+        /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         if(verifier_status == 1){ // stop
           pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
           goto exit;
         }
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+        */
       }
     } else {
       if(invalid_channels_status[i] == 1 && already_read[i] == 0){
