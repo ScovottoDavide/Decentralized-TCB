@@ -202,6 +202,7 @@ void PoC_TPA(void *input) {
 
 	while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
     if(ch_read_hearbeat.recv_bytes == expected_size){
+      fprintf(stdout, "Nonce #%d\n", expected_size / 32);
       expected_size+=32;
 
       TpaData.nonce_blob.tag = (u_int8_t)0;
@@ -251,13 +252,14 @@ void PoC_TPA(void *input) {
       Esys_Finalize(&esys_context);
       Tss2_TctiLdr_Finalize (&tcti_context);
 
-      pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+      /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
       if(tpa_status == 1){ // stop
         fprintf(stdout, "TPA Stopped\n");
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
         goto end;
       }
       pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+      */
     }
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
     if(tpa_status == 1){ // stop
@@ -625,10 +627,6 @@ int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_
   acc += sizeof last;
 
   fprintf(stdout, "Writing at "); hex_print(ch_send->current_index.index, INDEX_SIZE); fprintf(stdout, "\n");
-  fprintf(stdout, "last: ");
-  for(i = acc - sizeof last; i < acc; i++)
-    fprintf(stdout, "%c", to_send_data[i]);
-  fprintf(stdout, "\n");
   WAM_write(ch_send, to_send_data, (uint32_t)bytes_to_send, false);
   fprintf(stdout, "DONE WRITING - Sent bytes = %d, ima = %d\n\n", bytes_to_send, *imaLogBytesSize);
 
