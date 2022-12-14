@@ -157,7 +157,7 @@ void PoC_TPA(void *input) {
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	uint8_t nonce[32];
 	uint32_t expected_size = 32;
-	uint8_t ret = 0;
+	uint8_t ret = 0, printed = 0;
   IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
   FILE *index_file;
 
@@ -200,10 +200,16 @@ void PoC_TPA(void *input) {
     return ;
   }
 
-	while(!WAM_read(&ch_read_hearbeat, nonce, &expected_size)){
+	while(1){
+    if(!printed){
+      fprintf(stdout, "Waiting nonce... ");
+      printed = 1;
+    }
+    WAM_read(&ch_read_hearbeat, nonce, &expected_size);
     if(ch_read_hearbeat.recv_bytes == expected_size){
       fprintf(stdout, "Nonce #%d\n", expected_size / 32);
       expected_size+=32;
+      printed = 0;
 
       TpaData.nonce_blob.tag = (u_int8_t)0;
       TpaData.nonce_blob.size = sizeof nonce;
