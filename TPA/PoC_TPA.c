@@ -156,7 +156,7 @@ void PoC_TPA(void *input) {
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	uint8_t nonce[32];
-	uint32_t expected_size = 32;
+	uint32_t expected_size = 32, fixed_nonce_size = 32;
 	uint8_t ret = 0, printed = 0;
   IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
   FILE *index_file;
@@ -205,67 +205,70 @@ void PoC_TPA(void *input) {
       fprintf(stdout, "Waiting nonce... ");
       printed = 1;
     }
-    WAM_read(&ch_read_hearbeat, nonce, &expected_size);
-    if(ch_read_hearbeat.recv_bytes == expected_size){
-      fprintf(stdout, "Nonce #%d\n", expected_size / 32);
-      expected_size+=32;
-      printed = 0;
+    if(!WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size)){
+      if(ch_read_hearbeat.recv_bytes == expected_size){
+        fprintf(stdout, "Nonce #%d\n", expected_size / 32);
+        expected_size+=fixed_nonce_size;
+        printed = 0;
 
-      TpaData.nonce_blob.tag = (u_int8_t)0;
-      TpaData.nonce_blob.size = sizeof nonce;
-      memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
-      
-      tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
-      if (tss_r != TSS2_RC_SUCCESS) {
-        printf("Could not initialize tcti context\n");
-        return ;
-      }
-      tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
-      if (tss_r != TSS2_RC_SUCCESS) {
-        printf("Could not initialize esys context\n");
-        return ;
-      }
-      if (pcr_check_if_zeros(esys_context)) {
-        // Extend both
-        ExtendPCR9(esys_context, "sha1");
-        fprintf(stdout, "PCR9 sha1 extended\n");
-        ExtendPCR9(esys_context, "sha256");
-        fprintf(stdout, "PCR9 sha256 extended\n");
-      }
+        TpaData.nonce_blob.tag = (u_int8_t)0;
+        TpaData.nonce_blob.size = sizeof nonce;
+        memcpy(TpaData.nonce_blob.buffer, nonce, TpaData.nonce_blob.size);
+        
+        tss_r = Tss2_TctiLdr_Initialize(NULL, &tcti_context);
+        if (tss_r != TSS2_RC_SUCCESS) {
+          printf("Could not initialize tcti context\n");
+          return ;
+        }
+        tss_r = Esys_Initialize(&esys_context, tcti_context, NULL);
+        if (tss_r != TSS2_RC_SUCCESS) {
+          printf("Could not initialize esys context\n");
+          return ;
+        }
+        if (pcr_check_if_zeros(esys_context)) {
+          // Extend both
+          ExtendPCR9(esys_context, "sha1");
+          fprintf(stdout, "PCR9 sha1 extended\n");
+          ExtendPCR9(esys_context, "sha256");
+          fprintf(stdout, "PCR9 sha256 extended\n");
+        }
 
-      tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize, ak_handle);
-      if (tss_r != TSS2_RC_SUCCESS) {
-        printf("Error while computing quote!\n");
-        return ;
-      } 
-      
-      /** SEND DATA TO THE REMOTE ATTESTOR */
-      fprintf(stdout, "Writing...\n");
-      if( clock_gettime( CLOCK_REALTIME, &start) == -1 ) {
-        perror( "clock gettime" );
-        goto end;
-      }
-      sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
+        tss_r = tpm2_quote(esys_context, &TpaData, imaLogBytesSize, ak_handle);
+        if (tss_r != TSS2_RC_SUCCESS) {
+          printf("Error while computing quote!\n");
+          return ;
+        } 
+        
+        /** SEND DATA TO THE REMOTE ATTESTOR */
+        fprintf(stdout, "Writing...\n");
+        if( clock_gettime( CLOCK_REALTIME, &start) == -1 ) {
+          perror( "clock gettime" );
+          goto end;
+        }
+        sendDataToRA_WAM(TpaData, &imaLogBytesSize, &ch_send); 
 
-      if( clock_gettime(CLOCK_REALTIME, &stop) == -1 ) {
-        perror( "clock gettime" );
-        goto end;
-      }
+        if( clock_gettime(CLOCK_REALTIME, &stop) == -1 ) {
+          perror( "clock gettime" );
+          goto end;
+        }
 
-      sub_timespec(start, stop, &delta);
-      printf("TIME: %d.%.9ld\n", (int)delta.tv_sec, delta.tv_nsec);
+        sub_timespec(start, stop, &delta);
+        printf("TIME: %d.%.9ld\n", (int)delta.tv_sec, delta.tv_nsec);
 
-      Esys_Finalize(&esys_context);
-      Tss2_TctiLdr_Finalize (&tcti_context);
+        Esys_Finalize(&esys_context);
+        Tss2_TctiLdr_Finalize (&tcti_context);
 
-      /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
-      if(tpa_status == 1){ // stop
-        fprintf(stdout, "TPA Stopped\n");
+        /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+        if(tpa_status == 1){ // stop
+          fprintf(stdout, "TPA Stopped\n");
+          pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+          goto end;
+        }
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-        goto end;
+        */
       }
-      pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-      */
+    } else {
+      fprintf(stdout, "Error while reading\n");
     }
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
     if(tpa_status == 1){ // stop

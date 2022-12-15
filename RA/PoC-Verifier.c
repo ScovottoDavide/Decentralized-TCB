@@ -109,7 +109,7 @@ void PoC_Verifier(void *input){
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
-  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset;
+  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset, fixed_nonce_size = 32;
 	uint8_t ret = 0, **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
   uint8_t my_ak_digest[SHA256_DIGEST_LENGTH+1];
   uint16_t *previous_msg_num;
@@ -244,23 +244,26 @@ void PoC_Verifier(void *input){
       fprintf(stdout, "Waiting nonce from "); hex_print(ch_read_hearbeat.read_idx, INDEX_SIZE); fprintf(stdout, "\n");
       print_nonce = 1;
     }
-    WAM_read(&ch_read_hearbeat, nonce, &expected_size);
-    if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
-      fprintf(stdout, "Nonce received # %d\n", expected_size / 32);
-      // new nonce arrived --> read new attestations
-      expected_size+=32;
-      have_to_read = 1;
-      print_nonce = 0;
+    if(!WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size)){
+       if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
+        fprintf(stdout, "Nonce received # %d\n", expected_size / 32);
+        // new nonce arrived --> read new attestations
+        expected_size+=fixed_nonce_size;
+        have_to_read = 1;
+        print_nonce = 0;
 
-      for(i = 0; i < nodes_number; i++){
-        ch_read_attest[i].recv_bytes = 0;
-        ch_read_attest[i].recv_msg = 0;
-        offset[i] = 0;
-        previous_msg_num[i] = 0;
+        for(i = 0; i < nodes_number; i++){
+          ch_read_attest[i].recv_bytes = 0;
+          ch_read_attest[i].recv_msg = 0;
+          offset[i] = 0;
+          previous_msg_num[i] = 0;
+        }
+        nonce_blob.tag = (u_int8_t)0;
+        nonce_blob.size = sizeof nonce;
+        memcpy(nonce_blob.buffer, nonce, nonce_blob.size);
       }
-      nonce_blob.tag = (u_int8_t)0;
-      nonce_blob.size = sizeof nonce;
-      memcpy(nonce_blob.buffer, nonce, nonce_blob.size);
+    } else {
+      fprintf(stdout, "Error while reading Nonce\n");
     }
     i = 0;
     while(have_to_read > 0){
@@ -335,6 +338,8 @@ void PoC_Verifier(void *input){
               free(TpaData[i].ima_log_blob.logEntry[j].template_data);
             free(TpaData[i].ima_log_blob.logEntry);
           }
+        } else {
+          fprintf(stdout, "Error while reading\n");        
         }
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
@@ -759,7 +764,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
         */
       } else {
-        fprintf(stdout, "problema WAM READ\n");
+        fprintf(stdout, "Error while reading\n");
       }
     } else {
       if(invalid_channels_status[i] == 1 && already_read[i] == 0){
