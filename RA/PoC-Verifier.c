@@ -96,7 +96,7 @@ void PoC_Verifier(void *input){
   int nodes_number = ((ARGS *)input)->nodes_number;
   const char *file_index_path_name = ((ARGS *)input)->index_file_path_name;
   int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024 * 10, *invalid_channels_attest, 
-    *invalid_channels_status, invalid_table_index;
+    *invalid_channels_status, invalid_table_index, ret = 0;
   TO_SEND *TpaData; VERIFICATION_RESPONSE *ver_response; AK_FILE_TABLE *ak_table; NONCE_BLOB nonce_blob;
   WHITELIST_TABLE *whitelist_table; PCRS_MEM *pcrs_mem;
   STATUS_TABLE local_trust_status;
@@ -110,7 +110,7 @@ void PoC_Verifier(void *input){
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
   uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset, fixed_nonce_size = 32;
-	uint8_t ret = 0, **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
+	uint8_t **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
   uint8_t my_ak_digest[SHA256_DIGEST_LENGTH+1];
   uint16_t *previous_msg_num;
 
@@ -244,7 +244,8 @@ void PoC_Verifier(void *input){
       fprintf(stdout, "Waiting nonce from "); hex_print(ch_read_hearbeat.read_idx, INDEX_SIZE); fprintf(stdout, "\n");
       print_nonce = 1;
     }
-    if(!WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size)){
+    ret = WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size);
+    if(!ret){
        if(ch_read_hearbeat.recv_bytes == expected_size && !have_to_read){
         fprintf(stdout, "Nonce received # %d\n", expected_size / 32);
         // new nonce arrived --> read new attestations
@@ -262,13 +263,14 @@ void PoC_Verifier(void *input){
         nonce_blob.size = sizeof nonce;
         memcpy(nonce_blob.buffer, nonce, nonce_blob.size);
       }
-    } else {
+    } else if(ret != WAM_NOT_FOUND){
       fprintf(stdout, "Error while reading Nonce\n");
     }
     i = 0;
     while(have_to_read > 0){
       if(verified_nodes[i] == 0 && invalid_channels_attest[i] != 1){ 
-        if(!WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message)){            
+        ret = WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message);
+        if(!ret){            
           if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
             memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
             offset[i] += DATA_SIZE;
@@ -338,8 +340,8 @@ void PoC_Verifier(void *input){
               free(TpaData[i].ima_log_blob.logEntry[j].template_data);
             free(TpaData[i].ima_log_blob.logEntry);
           }
-        } else {
-          fprintf(stdout, "Error while reading\n");        
+        } else if(ret != WAM_NOT_FOUND) {
+          fprintf(stdout, "Error while reading ret=%d\n", ret);        
         }
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
@@ -710,7 +712,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
   uint32_t expected_response_size = DATA_SIZE, previous_msg_num[nodes_number], offset[nodes_number];
   uint8_t **read_response_messages, expected_response_messages[DATA_SIZE], last[4]="done";
   uint16_t max_number_trust_entries = 0;
-  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0, ret = 1, *read_prints;
+  int i=0, j, acc = 0, invalid_table_index, *already_read, valid_local_entries = 0, ret = 1, *read_prints, ret_read = 0;
   STATUS_TABLE *read_local_trust_status, global_trust_status;
 
   already_read = calloc(nodes_number, sizeof(int));
@@ -738,7 +740,8 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
         fprintf(stdout, "Reading at "); hex_print(ch_read_status[i].read_idx, INDEX_SIZE); fprintf(stdout, "\n");
         read_prints[i] = 1;
       }
-      if(!WAM_read(&ch_read_status[i], expected_response_messages, &expected_response_size)){
+      ret_read = WAM_read(&ch_read_status[i], expected_response_messages, &expected_response_size);
+      if(!ret_read){
         if(ch_read_status[i].recv_msg != previous_msg_num[i]){
           memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE*sizeof(uint8_t));
           for(j = 0; j < DATA_SIZE; j++) {
@@ -763,8 +766,8 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
         }
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
         */
-      } else {
-        fprintf(stdout, "Error while reading\n");
+      } else if(ret_read != WAM_NOT_FOUND) {
+        fprintf(stdout, "Error while reading ret=%d\n", ret_read);
       }
     } else {
       if(invalid_channels_status[i] == 1 && already_read[i] == 0){

@@ -145,7 +145,7 @@ void PoC_TPA(void *input) {
   TSS2_RC tss_r;
   ESYS_CONTEXT *esys_context = NULL;
   TSS2_TCTI_CONTEXT *tcti_context = NULL;
-  int persistent_handles = 0, i;
+  int persistent_handles = 0, i, ret = 0;
   TO_SEND TpaData;
   ssize_t imaLogBytesSize = 0;
   uint16_t ek_handle[HANDLE_SIZE], ak_handle[HANDLE_SIZE];
@@ -157,7 +157,7 @@ void PoC_TPA(void *input) {
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	uint8_t nonce[32];
 	uint32_t expected_size = 32, fixed_nonce_size = 32;
-	uint8_t ret = 0, printed = 0;
+	uint8_t  printed = 0;
   IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
   FILE *index_file;
 
@@ -205,7 +205,8 @@ void PoC_TPA(void *input) {
       fprintf(stdout, "Waiting nonce... ");
       printed = 1;
     }
-    if(!WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size)){
+    ret = WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size);
+    if(!ret){
       if(ch_read_hearbeat.recv_bytes == expected_size){
         fprintf(stdout, "Nonce #%d\n", expected_size / 32);
         expected_size+=fixed_nonce_size;
@@ -267,8 +268,8 @@ void PoC_TPA(void *input) {
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
         */
       }
-    } else {
-      fprintf(stdout, "Error while reading\n");
+    } else if(ret != WAM_NOT_FOUND){
+      fprintf(stdout, "Error while reading ret=%d\n", ret);
     }
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
     if(tpa_status == 1){ // stop
