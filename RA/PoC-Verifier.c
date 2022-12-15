@@ -358,13 +358,14 @@ void PoC_Verifier(void *input){
       }
       if((i + 1) == nodes_number) i = 0;
       else i+=1;
-      pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+      /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
       if(verifier_status == 1){ // stop
         fprintf(stdout, "Verifier Stopped\n");
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
         goto end;
       }
       pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+      */
     }
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
     if(verifier_status == 1){ // stop
