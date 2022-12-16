@@ -91,7 +91,7 @@ void PoC_heartbeat(void *nodes_number_p) {
 	
     FILE *index_file;
     int len_file, i, j, new_nonce_send = 1, received_responses = 0, *responses_map, max_number_trust_entries = 0;
-    int *invalid_channels, invalid_table_index = 0;
+    int *invalid_channels, invalid_table_index = 0, ret = 0;
     char *data = NULL, prefix_str_index[12]="read_index_", prefix_str_pubK[9]="pub_key_", buf_index_str[100] = {0};
 
     IOTA_Index file_index, *read_response_indexes;
@@ -151,6 +151,7 @@ void PoC_heartbeat(void *nodes_number_p) {
     read_local_trust_status = malloc(nodes_number * sizeof(STATUS_TABLE));
     invalid_channels = calloc(nodes_number, sizeof(int));
 
+    int *read_prints = calloc(nodes_number, sizeof(int));
     while(1){
         if(new_nonce_send){
             if (!RAND_bytes(nonce, NONCE_LEN)) {
@@ -175,13 +176,18 @@ void PoC_heartbeat(void *nodes_number_p) {
         i = 0;
         while(received_responses < nodes_number && !new_nonce_send){
             if(responses_map[i] == 0 && i < nodes_number && invalid_channels[i] != 1){
-                if(!WAM_read(&ch_read_responses[i], expected_response_messages, &expected_response_size)){
+                if(read_prints[i] == 0) {
+                    fprintf(stdout, "Reading at "); hex_print(ch_read_responses[i].read_idx, INDEX_SIZE); fprintf(stdout, "\n");
+                    read_prints[i] = 1;
+                }
+                ret = WAM_read(&ch_read_responses[i], expected_response_messages, &expected_response_size);
+                if(ret == WAM_OK){
                     if(ch_read_responses[i].recv_msg != previous_msg_num[i]){
                         memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE);
                         offset[i] += DATA_SIZE;
                         previous_msg_num[i] += 1;
                     }
-                    else if(memcmp(last, read_response_messages[i] + ch_read_responses[i].recv_bytes - sizeof last, sizeof last) == 0) {
+                    if(memcmp(last, read_response_messages[i] + ch_read_responses[i].recv_bytes - sizeof last, sizeof last) == 0) {
                         parseLocalTrustStatusMessage(read_response_messages[i], read_local_trust_status, i);
                         fprintf(stdout, "New response arrived of bytes [%d] from ", ch_read_responses[i].recv_bytes); hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, "\n");
                         if(read_local_trust_status[i].number_of_entries > max_number_trust_entries)
@@ -189,7 +195,10 @@ void PoC_heartbeat(void *nodes_number_p) {
                         received_responses+=1;
                         responses_map[i] = 1;
                     }
+                } else if(ret != WAM_OK && ret != WAM_NOT_FOUND){
+                    fprintf(stdout, "Read error: ret = %d\n", ret);
                 }
+consensus:                
                 if(received_responses == nodes_number){
                     // consencous proc
                     global_trust_status.number_of_entries = max_number_trust_entries + 1; // have to consinder the node it self too
@@ -214,16 +223,19 @@ void PoC_heartbeat(void *nodes_number_p) {
                     fprintf(stdout, "All responses arrived! Start new cicle.\n");
                     new_nonce_send = 1;
                     received_responses = 0;
-                    for(j = 0; j < nodes_number; j++)
+                    for(j = 0; j < nodes_number; j++){
                         responses_map[j] = 0;
+                        read_prints[j] = 0;   
+                    }
                     free(global_trust_status.status_entries);
                     if(ch_send.sent_bytes >= 32)
-                        sleep(10);
+                        sleep(5);
                 }
             } else {
                 if(responses_map[i] == 0 && invalid_channels[i] == 1){
                     responses_map[i] = 1;
                     received_responses+=1;
+                    if(received_responses == nodes_number) goto consensus;
                 }
             }
             if(i + 1 == nodes_number) i = 0;
