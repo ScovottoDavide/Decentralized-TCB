@@ -61,18 +61,17 @@ int main(int argc, char *argv[]) {
       fprintf(stdout, "1. init --> Initialize TPM configuration: sudo ./PoC_TPA [path where 'index' file is] init\n");
       fprintf(stdout, "1. run --> Execute the Trusted Platform Agent: sudo ./PoC_TPA [path where 'index' file is] run\n");
       goto exit;
-    }else {
+    } else if(strcmp("init", argv[1]) == 0){
+      pthread_create(&th_tpa_init, NULL, (void *)&PoC_TPA_init, NULL);    
+      pthread_join(th_tpa_init, NULL);
+      goto exit;
+    } else {
       fprintf(stdout, "For help --> ./PoC_TPA --help\n");
       goto exit;
     }
   }
 
   if(argc == 3) {
-    if(strcmp("init", argv[2]) == 0){
-      pthread_create(&th_tpa_init, NULL, (void *)&PoC_TPA_init, NULL);    
-      pthread_join(th_tpa_init, NULL);
-      goto exit;
-    }
     if(strcmp("run", argv[2]) == 0) {
       pthread_create(&th_tpa, NULL, (void *)&PoC_TPA, (void *) argv[1]);
       pthread_create(&th_menu, NULL, (void *)&menu, NULL);
@@ -87,7 +86,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if(argc > 3) {
+  if(argc > 3 || argc < 2) {
     fprintf(stdout, "Wrong usage!\n");
     fprintf(stdout, "For help --> ./PoC_TPA --help\n");
   }
@@ -259,14 +258,13 @@ void PoC_TPA(void *input) {
         Esys_Finalize(&esys_context);
         Tss2_TctiLdr_Finalize (&tcti_context);
 
-        /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+        pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         if(tpa_status == 1){ // stop
           fprintf(stdout, "TPA Stopped\n");
           pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
           goto end;
         }
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-        */
       }
     } else if(ret != WAM_NOT_FOUND){
       fprintf(stdout, "Error while reading ret=%d\n", ret);

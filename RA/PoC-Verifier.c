@@ -288,7 +288,6 @@ void PoC_Verifier(void *input){
             parseTPAdata(TpaData, read_attest_message[i], i);
             //fprintf(stdout, "\tNew quote from [%d bytes]: ", ch_read_attest[i].recv_bytes); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
             have_to_read += 1;
-            fprintf(stdout, "Got node. have to read = %d\n", have_to_read);
 
             if (!PCR9_calculation(pcr9_sha1, pcr9_sha256, ak_table, TpaData[i], nodes_number)) {
               fprintf(stderr, "PCR9 calculation failed\n");
@@ -363,7 +362,6 @@ consensus:
         if(verified_nodes[i] == 0 && invalid_channels_attest[i] == 1){ 
           verified_nodes[i] = 1;
           have_to_read+=1;
-          fprintf(stdout, "Skipped node. have to read = %d\n", have_to_read);
           if(have_to_read == nodes_number + 1) goto consensus;
         }
       }
@@ -747,10 +745,6 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
       if(!ret_read){
         if(ch_read_status[i].recv_msg != previous_msg_num[i]){
           memcpy(read_response_messages[i] + offset[i], expected_response_messages, DATA_SIZE*sizeof(uint8_t));
-          for(j = 0; j < DATA_SIZE; j++) {
-            fprintf(stdout, "%c", read_response_messages[i][j]);
-          }
-          fprintf(stdout, "\n");
           offset[i] += DATA_SIZE;
           previous_msg_num[i] += 1;
         }
@@ -800,7 +794,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
     } 
   }
 
-  fprintf(stdout, "RESULT: \n");
+  /*fprintf(stdout, "RESULT: \n");
   for(i = 0; i < nodes_number + 1; i++) {
     if(read_local_trust_status[i].status_entries != NULL){
       fprintf(stdout, "From: "); hex_print(read_local_trust_status[i].from_ak_digest, 32); fprintf(stdout, "\n");
@@ -809,7 +803,7 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
         fprintf(stdout, " status %d\n", read_local_trust_status[i].status_entries[j].status);
       }
     } else fprintf(stdout, "NULL\n");
-  }
+  }*/
 
   global_trust_status.number_of_entries = max_number_trust_entries + 1;
   global_trust_status.status_entries = malloc(global_trust_status.number_of_entries * sizeof(STATUS_ENTRY));
