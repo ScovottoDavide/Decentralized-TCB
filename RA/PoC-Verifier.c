@@ -288,6 +288,7 @@ void PoC_Verifier(void *input){
             parseTPAdata(TpaData, read_attest_message[i], i);
             //fprintf(stdout, "\tNew quote from [%d bytes]: ", ch_read_attest[i].recv_bytes); hex_print(TpaData[i].ak_digest_blob.buffer, SHA256_DIGEST_LENGTH);
             have_to_read += 1;
+            fprintf(stdout, "Got node. have to read = %d\n", have_to_read);
 
             if (!PCR9_calculation(pcr9_sha1, pcr9_sha256, ak_table, TpaData[i], nodes_number)) {
               fprintf(stderr, "PCR9 calculation failed\n");
@@ -361,6 +362,7 @@ void PoC_Verifier(void *input){
         if(verified_nodes[i] == 0 && invalid_channels_attest[i] == 1){ 
           verified_nodes[i] = 1;
           have_to_read+=1;
+          fprintf(stdout, "Skipped node. have to read = %d\n", have_to_read);
         }
       }
       if((i + 1) == nodes_number) i = 0;
