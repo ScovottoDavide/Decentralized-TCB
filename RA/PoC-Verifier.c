@@ -280,7 +280,7 @@ void PoC_Verifier(void *input){
             }
             previous_msg_num[i] += 1;
           } 
-          else if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
+          if(memcmp(last, read_attest_message[i] + ch_read_attest[i].recv_bytes - sizeof last, sizeof last) == 0){
             if(ch_read_attest[i].recv_bytes < attest_messages_sizes[i]){
               attest_messages_sizes[i] = ch_read_attest[i].recv_bytes;
               read_attest_message[i] = realloc(read_attest_message[i], attest_messages_sizes[i] * sizeof(uint8_t));
@@ -365,14 +365,13 @@ void PoC_Verifier(void *input){
       }
       if((i + 1) == nodes_number) i = 0;
       else i+=1;
-      /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+      pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
       if(verifier_status == 1){ // stop
         fprintf(stdout, "Verifier Stopped\n");
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
         goto end;
       }
       pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-      */
     }
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
     if(verifier_status == 1){ // stop
@@ -759,13 +758,12 @@ int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_numbe
           already_read[i] = 1;
           i+=1;
         }
-        /*pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
+        pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
         if(verifier_status == 1){ // stop
           pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
           goto exit;
         }
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
-        */
       } else if(ret_read != WAM_NOT_FOUND) {
         fprintf(stdout, "Error while reading ret=%d\n", ret_read);
       }
