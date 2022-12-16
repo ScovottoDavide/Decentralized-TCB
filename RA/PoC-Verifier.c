@@ -344,6 +344,7 @@ void PoC_Verifier(void *input){
         } else if(ret != WAM_NOT_FOUND) {
           fprintf(stdout, "Error while reading ret=%d\n", ret);        
         }
+consensus:
         if(have_to_read == nodes_number + 1){ // +1 because have_to_read start count from 1
           // write "response" to heartbeat
           fprintf(stdout, "Sending local trust status results... \n");
@@ -363,6 +364,7 @@ void PoC_Verifier(void *input){
           verified_nodes[i] = 1;
           have_to_read+=1;
           fprintf(stdout, "Skipped node. have to read = %d\n", have_to_read);
+          if(have_to_read == nodes_number + 1) goto consensus;
         }
       }
       if((i + 1) == nodes_number) i = 0;
