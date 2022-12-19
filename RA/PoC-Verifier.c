@@ -269,11 +269,7 @@ void PoC_Verifier(void *input){
     i = 0;
     while(have_to_read > 0){
       if(verified_nodes[i] == 0 && invalid_channels_attest[i] != 1){ 
-        if(ch_read_hearbeat.recv_bytes > 32)
-          fprintf(stdout, "Entering read\n");
         ret = WAM_read(&ch_read_attest[i], expected_attest_message, &expected_size_attest_message);
-        if(ch_read_hearbeat.recv_bytes > 32 && ret != WAM_NOT_FOUND)
-          fprintf(stdout, "Exited read, ret %d\n", ret);
         if(!ret){            
           if(ch_read_attest[i].recv_msg != previous_msg_num[i]) {
             memcpy(read_attest_message[i] + offset[i], expected_attest_message, DATA_SIZE);
