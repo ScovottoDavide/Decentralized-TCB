@@ -201,13 +201,17 @@ void PoC_TPA(void *input) {
 
 	while(1){
     if(!printed){
-      fprintf(stdout, "Waiting nonce... ");
+      fprintf(stdout, "Waiting nonce... \n");
       printed = 1;
     }
+    if(ch_read_hearbeat.recv_bytes > 32)
+      fprintf(stdout, "Entering read\n");
     ret = WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size);
+    if(ch_read_hearbeat.recv_bytes > 32 && ret != WAM_NOT_FOUND)
+      fprintf(stdout, "Exited read, ret %d\n", ret);
     if(!ret){
+      fprintf(stdout, "Nonce #%d\n", expected_size / 32);
       if(ch_read_hearbeat.recv_bytes == expected_size){
-        fprintf(stdout, "Nonce #%d\n", expected_size / 32);
         expected_size+=fixed_nonce_size;
         printed = 0;
 
