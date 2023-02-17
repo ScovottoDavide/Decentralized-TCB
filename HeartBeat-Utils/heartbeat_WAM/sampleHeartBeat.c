@@ -7,7 +7,7 @@
 #include "WAM/WAM.h"
 #include "../../Consensous/consensous.h"
 
-#define NONCE_LEN 32 + 1
+#define NONCE_LEN 32
 
 int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
 void menu(void *in);
@@ -157,7 +157,7 @@ void PoC_heartbeat(void *nodes_number_p) {
             if (!RAND_bytes(nonce, NONCE_LEN)) {
                 return;
             } else {
-                nonce[NONCE_LEN] = '\0';
+                //nonce[NONCE_LEN] = '\0';
                 printf("NONCE: ");
                 for (i = 0; i < NONCE_LEN; i++)
                     printf("%02x", nonce[i]);

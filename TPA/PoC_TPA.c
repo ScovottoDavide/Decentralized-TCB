@@ -15,7 +15,6 @@
 //#include "../IMA/ima_read_writeOut_binary.h"
 
 #define BILLION  1000000000L;
-#define NONCE_LEN 32 + 1
 
 bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle);
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle);
@@ -155,8 +154,8 @@ void PoC_TPA(void *input) {
 	WAM_channel ch_read_hearbeat, ch_send, ch_send_AkPub, ch_send_whitelist;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
-	uint8_t nonce[NONCE_LEN];
-	uint32_t expected_size = 32, fixed_nonce_size = NONCE_LEN;
+	uint8_t nonce[32];
+	uint32_t expected_size = 32, fixed_nonce_size = 32;
 	uint8_t  printed = 0;
   IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
   FILE *index_file;
@@ -206,10 +205,10 @@ void PoC_TPA(void *input) {
       printed = 1;
     }
     if(ch_read_hearbeat.recv_bytes > 32)
-      //fprintf(stdout, "Entering read\n");
+      fprintf(stdout, "Entering read\n");
     ret = WAM_read(&ch_read_hearbeat, nonce, &fixed_nonce_size);
     if(ch_read_hearbeat.recv_bytes > 32 && ret != WAM_NOT_FOUND)
-      //fprintf(stdout, "Exited read, ret %d\n", ret);
+      fprintf(stdout, "Exited read, ret %d\n", ret);
     if(!ret){
       fprintf(stdout, "Nonce #%d\n", expected_size / 32);
       if(ch_read_hearbeat.recv_bytes == expected_size){
