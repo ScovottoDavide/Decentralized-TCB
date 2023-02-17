@@ -7,7 +7,7 @@
 #include "WAM/WAM.h"
 #include "../../Consensous/consensous.h"
 
-#define NONCE_LEN 32
+#define NONCE_LEN 32 + 1
 
 int checkNT_in_froms(uint8_t *global_digest, STATUS_TABLE *read_trust_local_status, int nodes_number);
 void menu(void *in);
@@ -82,7 +82,7 @@ void menu(void *in) {
 
 void PoC_heartbeat(void *nodes_number_p) {
     int nodes_number = *((int *)nodes_number_p);
-	uint8_t mykey[]="supersecretkeyforencryptionalby", nonce[NONCE_LEN], expected_response_messages[DATA_SIZE];
+	uint8_t mykey[]="supersecretkeyforencryption!!!!", nonce[NONCE_LEN], expected_response_messages[DATA_SIZE];
     uint8_t last[4] = "done", **read_response_messages;
 	uint32_t expected_response_size = DATA_SIZE, offset[nodes_number], previous_msg_num[nodes_number];
 	WAM_AuthCtx a; a.type = AUTHS_NONE;

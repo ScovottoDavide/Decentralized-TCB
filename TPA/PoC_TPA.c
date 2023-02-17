@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
   if(argc == 2) {
     if(strcmp("--help", argv[1]) == 0){
       fprintf(stdout, "Supported commands:\n");
-      fprintf(stdout, "1. init --> Initialize TPM configuration: sudo ./PoC_TPA [path where 'index' file is] init\n");
+      fprintf(stdout, "1. init --> Initialize TPM configuration: sudo ./PoC_TPA init\n");
       fprintf(stdout, "1. run --> Execute the Trusted Platform Agent: sudo ./PoC_TPA [path where 'index' file is] run\n");
       goto exit;
     } else if(strcmp("init", argv[1]) == 0){
@@ -150,7 +150,7 @@ void PoC_TPA(void *input) {
   uint16_t ek_handle[HANDLE_SIZE], ak_handle[HANDLE_SIZE];
 
   // WAM
-  uint8_t mykey[]="supersecretkeyforencryptionalby";
+  uint8_t mykey[]="\0upersecretkeyforencryption!!!!";
 	WAM_channel ch_read_hearbeat, ch_send, ch_send_AkPub, ch_send_whitelist;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
@@ -271,7 +271,7 @@ void PoC_TPA(void *input) {
         pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
       }
     } else if(ret != WAM_NOT_FOUND){
-      fprintf(stdout, "Error while reading ret=%d\n", ret);
+      //fprintf(stdout, "Error while reading ret=%d\n", ret);
     }
     pthread_mutex_lock(&menuLock); // Lock a mutex for heartBeat_Status
     if(tpa_status == 1){ // stop
