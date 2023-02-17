@@ -6,6 +6,7 @@
 #include <openssl/rand.h>
 #include "WAM/WAM.h"
 #include "../../Consensous/consensous.h"
+#include <sys/time.h>
 
 #define NONCE_LEN 32
 
