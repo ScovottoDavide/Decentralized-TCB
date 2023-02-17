@@ -6,7 +6,10 @@
 #include <openssl/rand.h>
 #include "WAM/WAM.h"
 #include "../../Consensous/consensous.h"
-#include <sys/time.h>
+// #####
+#include <time.h>
+#include <math.h>
+// #####
 
 #define NONCE_LEN 32
 
@@ -98,6 +101,15 @@ void PoC_heartbeat(void *nodes_number_p) {
     IOTA_Index file_index, *read_response_indexes;
     WAM_channel ch_send, *ch_read_responses;
 
+    //##### TESTS struct ######
+    struct timespec current_time;
+    long            ms; // Milliseconds
+    time_t          s;  // Seconds
+    int count_nonces_sent = 0;
+    FILE *log_timestamps;
+    log_timestamps = fopen("log_timestamps.csv", "a");
+    //##### TESTS struct ######
+
     IOTA_Endpoint privatenet = {.hostname = "130.192.86.15",
 							 .port = 14000,
 							 .tls = false};
@@ -164,6 +176,19 @@ void PoC_heartbeat(void *nodes_number_p) {
                     printf("%02x", nonce[i]);
                 printf("\n");
                 WAM_write(&ch_send, nonce, NONCE_LEN, false);   
+                // ###
+                count_nonces_sent += 1;
+                if( clock_gettime( CLOCK_REALTIME, &current_time) == -1 ) {
+                    perror( "clock gettime" );
+                }
+                s  = current_time.tv_sec;
+                ms = round(current_time.tv_nsec / 1.0e6); // Convert nanoseconds to milliseconds
+                if (ms > 999) {
+                    s++;
+                    ms = 0;
+                }
+                fprintf(log_timestamps, "%d,%"PRIdMAX".%03ld\n", count_nonces_sent, (intmax_t)s, ms);
+                // ###
                 fprintf(stdout, "[CH-id=%d] Messages sent: %d (%d bytes)\n", ch_send.id, ch_send.sent_msg, ch_send.sent_bytes);
                 new_nonce_send = 0;
             }

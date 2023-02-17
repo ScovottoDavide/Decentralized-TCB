@@ -21,7 +21,7 @@ LDFLAGS+=\
 
 LDFLAGS += \
 -L${WAM_DIR}/iota.c/build/lib/ \
--liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium -lpthread
+-liota_crypto -lcrypto -liota_core -liota_client -lcjson -lcurl -lsodium -lpthread -lm
 
 APP = WAM_heartbeat
 

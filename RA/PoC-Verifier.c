@@ -9,6 +9,12 @@
 #include "WAM/WAM.h"
 #include "../Consensous/consensous.h"
 
+// #####
+#include <time.h>
+#include <math.h>
+// #####
+
+
 bool legal_int(const char *str);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
@@ -93,6 +99,15 @@ void menu(void *in) {
 }
 
 void PoC_Verifier(void *input){
+  //##### TESTS struct ######
+  struct timespec current_time;
+  long            ms; // Milliseconds
+  time_t          s;  // Seconds
+  int count_nonces_sent = 0;
+  FILE *log_timestamps;
+  log_timestamps = fopen("log_timestamps_RA.csv", "a");
+  //##### TESTS struct ######
+
   int nodes_number = ((ARGS *)input)->nodes_number;
   const char *file_index_path_name = ((ARGS *)input)->index_file_path_name;
   int i, j, *verified_nodes, *attest_messages_sizes, attest_messages_size_increment = 1024 * 10, *invalid_channels_attest, 
@@ -351,6 +366,21 @@ consensus:
           // Get other RAs's local status to construct global trust status
           if(!readOthersTrustTables_Consensus(ch_read_status, nodes_number, local_trust_status, invalid_channels_status))
             goto end;
+
+          // ###
+          count_nonces_sent += 1;
+          if( clock_gettime( CLOCK_REALTIME, &current_time) == -1 ) {
+              perror( "clock gettime" );
+          }
+          s  = current_time.tv_sec;
+          ms = round(current_time.tv_nsec / 1.0e6); // Convert nanoseconds to milliseconds
+          if (ms > 999) {
+              s++;
+              ms = 0;
+          }
+          fprintf(log_timestamps, "%d,%"PRIdMAX".%03ld\n", count_nonces_sent, (intmax_t)s, ms);
+          // ###
+
           for(j = 0; j < nodes_number; j++){
             verified_nodes[j] = 0;
             if(local_trust_status.status_entries[j].status == 0)
