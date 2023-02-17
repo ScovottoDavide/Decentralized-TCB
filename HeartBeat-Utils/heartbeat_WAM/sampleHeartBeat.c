@@ -296,5 +296,6 @@ early_end:
         pthread_mutex_unlock(&earlyLock); // Unlock a mutex for heartBeat_Status
     }
     pthread_mutex_unlock(&menuLock); // Unlock a mutex for heartBeat_Status
+    fclose(log_timestamps);
     return ;
 }
