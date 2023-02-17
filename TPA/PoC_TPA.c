@@ -150,7 +150,7 @@ void PoC_TPA(void *input) {
   uint16_t ek_handle[HANDLE_SIZE], ak_handle[HANDLE_SIZE];
 
   // WAM
-  uint8_t mykey[]="\0upersecretkeyforencryption!!!!";
+  uint8_t mykey[]="supersecretkeyforencryption!!!!";
 	WAM_channel ch_read_hearbeat, ch_send, ch_send_AkPub, ch_send_whitelist;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
