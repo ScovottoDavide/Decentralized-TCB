@@ -104,7 +104,7 @@ void PoC_Verifier(void *input){
   
   IOTA_Index heartBeat_index, *read_indexes = NULL, *read_indexes_AkPub = NULL, *read_indexes_whitelist = NULL, write_response_index, 
     *read_indexes_status = NULL;
-  uint8_t mykey[]="supersecretkeyforencryption!!!!";
+  uint8_t mykey[]="supersecretkeyforencryptionalby";
 	WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak, *ch_read_whitelist, *ch_read_status;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
