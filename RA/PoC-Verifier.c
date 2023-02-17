@@ -9,8 +9,6 @@
 #include "WAM/WAM.h"
 #include "../Consensous/consensous.h"
 
-#define NONCE_LEN 32 + 1
-
 bool legal_int(const char *str);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
@@ -111,8 +109,8 @@ void PoC_Verifier(void *input){
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	
-  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset, fixed_nonce_size = NONCE_LEN;
-	uint8_t **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[NONCE_LEN], last[4] = "done";
+  uint32_t expected_size = 32, expected_size_attest_message = DATA_SIZE, *offset, fixed_nonce_size = 32;
+	uint8_t **read_attest_message = NULL, expected_attest_message[DATA_SIZE], have_to_read = 0, nonce[32], last[4] = "done";
   uint8_t my_ak_digest[SHA256_DIGEST_LENGTH+1];
   uint16_t *previous_msg_num;
 
