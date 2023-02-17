@@ -254,8 +254,8 @@ consensus:
                         read_prints[j] = 0;   
                     }
                     free(global_trust_status.status_entries);
-                    if(ch_send.sent_bytes >= 32)
-                        sleep(5);
+                    /*if(ch_send.sent_bytes >= 32)
+                        sleep(5);*/
                 }
             } else {
                 if(responses_map[i] == 0 && invalid_channels[i] == 1){
