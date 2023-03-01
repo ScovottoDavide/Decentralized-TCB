@@ -29,29 +29,6 @@ char* rand_str(size_t length) {
     return dest;
 }
 
-int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest){
-  EVP_MD_CTX*mdctx;
-  const EVP_MD *md;
-  unsigned int md_len, i;
-  unsigned char md_value[EVP_MAX_MD_SIZE];
-
-  OpenSSL_add_all_digests();
-
-  md = EVP_get_digestbyname(sha_alg);
-  if (md == NULL) {
-    printf("Unknown message digest %s\n", sha_alg);
-    return false;
-  }
-
-  mdctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(mdctx, md, NULL);
-  EVP_DigestUpdate(mdctx, akPub, strlen(akPub));
-  EVP_DigestFinal_ex(mdctx, digest, &md_len);
-  EVP_MD_CTX_free(mdctx);
-
-  return md_len;
-}
-
 // For now 1 node, 1 channel, 1 index!
 int read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex) {
     unsigned char expected_message[DATA_SIZE], *akPub = NULL, *digest = NULL;

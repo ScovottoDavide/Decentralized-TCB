@@ -6,7 +6,7 @@ WAM_DIR = .
 endif
 
 # define the C source files
-SRCS = PoC-Verifier.c tpm2_checkquote.c whitelist_verify.c read_akpub.c load_whitelists.c ../Consensous/consensous.c ${WAM_DIR}/WAM/WAM.c
+SRCS = PoC-Verifier.c tpm2_checkquote.c whitelist_verify.c read_akpub.c load_whitelists.c common.c ../Consensous/consensous.c ${WAM_DIR}/WAM/WAM.c
 
 # define any library to link into executable:
 # if I want to link libraries (libx.so or libx.a) I use the -llibname option

@@ -18,15 +18,6 @@ static tpm2_verifysig_ctx ctx = {
     .pcr_hash = TPM2B_TYPE_INIT(TPM2B_DIGEST, buffer),
 };
 
-u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_number) {
-  int i;
-  for(i = 0; i < nodes_number; i++) {
-    if(!memcmp(ak_table[i].ak_md, TpaData.ak_digest_blob.buffer, TpaData.ak_digest_blob.size))
-      return ak_table[i].path_name;
-  }
-  return NULL;
-}
-
 bool calculate_pcr_digest(unsigned char *pcr10_sha256, unsigned char *pcr10_sha1, unsigned char *pcr9_sha256, unsigned char *pcr9_sha1,
                             TPMI_ALG_HASH hash_alg, TPM2B_DIGEST *digest){
   
