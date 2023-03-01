@@ -1,5 +1,54 @@
 #include "common.h"
 
+void init_IRdata(IRdata_ctx *ctx, int nodes_number) {
+  ctx->TpaData = malloc(nodes_number * sizeof(TO_SEND));
+  ctx->ver_response = malloc(nodes_number * sizeof(VERIFICATION_RESPONSE));
+  ctx->ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
+  ctx->whitelist_table = malloc(nodes_number * sizeof(WHITELIST_TABLE));
+  ctx->pcrs_mem = malloc(nodes_number * sizeof(PCRS_MEM));
+  ctx->local_trust_status.status_entries = malloc(nodes_number * sizeof(STATUS_ENTRY)); 
+
+  for(int i = 0; i < nodes_number; i++){
+    ctx->pcrs_mem[i].pcr10_sha1 = calloc((SHA_DIGEST_LENGTH + 1), sizeof(unsigned char));
+    ctx->pcrs_mem[i].pcr10_sha256 = calloc((SHA256_DIGEST_LENGTH + 1), sizeof(unsigned char));
+  }
+  ctx->pcr9_sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
+  ctx->pcr9_sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
+}
+
+int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len) {
+    // Clear buffer to ensure the string will be null terminated
+    memset(buffer, 0, buffer_len);
+
+    int c;
+    int bytes_read = 0;
+    // Read one char at a time until EOF or newline
+    while (EOF != (c = fgetc(stdin)) && '\n' != c) {
+        // Only add to buffer if within size limit
+        if (bytes_read < buffer_len - 1) {
+            buffer[bytes_read++] = (char)c;
+        }
+    }
+    return bytes_read;
+}
+
+void menu(void *in) {
+    int *verifier_status = ((ARGS_MENU *)in)->verifier_status;
+    pthread_mutex_t *menuLock = ((ARGS_MENU *)in)->menuLock;
+    char input[10];
+    do {
+      fprintf(stdout, "Press [1] --> Stop Verifier\n");
+      my_gets_avoid_bufferoverflow(input, 10);
+      if(atoi(input) == 1){
+        pthread_mutex_lock(menuLock); // Lock a mutex for heartBeat_Status
+        fprintf(stdout, "Waiting to process the last data. Gracefully stopping the Verifier!\n");
+        *verifier_status = 1;
+        pthread_mutex_unlock(menuLock); // Unlock a mutex for heartBeat_Status
+      }
+    }while(atoi(input) != 1);
+    return;
+}
+
 bool legal_int(const char *str) {
     while (*str)
         if (!isdigit(*str++))

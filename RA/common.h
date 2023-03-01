@@ -109,6 +109,19 @@ typedef struct{
     struct whitelist_entry *white_entries;
 }WHITELIST_TABLE;
 
+/* THREAD DATA STRUCTURES AND PROTOTYPES */
+  typedef struct {
+  const char *index_file_path_name;
+  int nodes_number;
+  }ARGS;
+  typedef struct {
+    pthread_mutex_t *menuLock;
+    volatile int *verifier_status;
+  }ARGS_MENU;
+  int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
+  void menu(void *in);
+/* ----------------------------- */
+
 bool legal_int(const char *str);
 bool openAKPub(const char *path, unsigned char **akPub);
 int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest);
@@ -122,5 +135,20 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
 void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
 void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number);
 int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE local_trust_status, int *invalid_channels_status, pthread_mutex_t *menuLock, volatile int verifier_status);
+
+typedef struct IRdata_ctx IRdata_ctx;
+struct IRdata_ctx {
+  TO_SEND *TpaData; 
+  VERIFICATION_RESPONSE *ver_response; 
+  AK_FILE_TABLE *ak_table; 
+  NONCE_BLOB nonce_blob;
+  WHITELIST_TABLE *whitelist_table; 
+  PCRS_MEM *pcrs_mem;
+  STATUS_TABLE local_trust_status;
+  unsigned char *pcr9_sha1; 
+  unsigned char *pcr9_sha256;
+};
+
+void init_IRdata(IRdata_ctx *ctx, int nodes_number);
 
 #endif
