@@ -94,29 +94,6 @@ int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *globa
         }
     }
 
-    // Get new consensus rule
-    consensus_rule = get_consensus_rule(nodes_number - nt_nodes - already_nt);
-
-    // Calculate overall trust
-    for(i = 0; i < nodes_number; i++) {
-        if(others_local_trust_status[i].status_entries != NULL){
-            index_is_nt = get_index_from_digest(global_trust_status, others_local_trust_status[i].from_ak_digest);
-            if(index_is_nt == -1) {
-                fprintf(stdout, "Author of local trust status unkown\n");
-                return 0;
-            }
-            if(global_trust_status->status_entries[index_is_nt].status != -1){
-                for(j = 0; j < others_local_trust_status[i].number_of_entries; j++) {
-                    k = get_index_from_digest(global_trust_status, others_local_trust_status[i].status_entries[j].ak_digest);
-                    if(k >= 0){
-                        if(others_local_trust_status[i].status_entries[j].status == 1)
-                            global_trust_status->status_entries[k].status += 1;
-                    }
-                }
-            }
-        }
-    }
-
     /*for(i = 0; i < global_trust_status->number_of_entries; i++) {
         fprintf(stdout, "Node ID: "); hex_print(global_trust_status->status_entries[i].ak_digest, SHA256_DIGEST_LENGTH); 
         fprintf(stdout, " --> %d\n", global_trust_status->status_entries[i].status);
@@ -125,9 +102,9 @@ int consensous_proc(STATUS_TABLE *others_local_trust_status, STATUS_TABLE *globa
     // Last pass on global
     for(i = 0; i < global_trust_status->number_of_entries; i++) {
         if(global_trust_status->status_entries[i].status >= consensus_rule)
-            global_trust_status->status_entries[i].status = 1;
-        else 
             global_trust_status->status_entries[i].status = 0;
+        else 
+            global_trust_status->status_entries[i].status = 1;
     }
     return 1;
 }
