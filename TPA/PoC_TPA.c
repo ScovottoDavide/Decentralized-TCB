@@ -9,13 +9,10 @@
 bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle);
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle);
 bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size);
-bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist);
-bool sendAkPub_WAM(WAM_channel *ch_send_AkPub, TO_SEND *TpaData);
-int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
 bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData);
+int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub,
-  IOTA_Index *write_index_whitelist);
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AK_Whitelist); 
 void hex_print(uint8_t *raw_data, size_t raw_size);
 
 int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len);
@@ -142,13 +139,13 @@ void PoC_TPA(void *input) {
 
   // WAM
   uint8_t mykey[]="supersecretkeyforencryptionalby";
-	WAM_channel ch_read_hearbeat, ch_send, ch_send_AkPub, ch_send_whitelist;
+	WAM_channel ch_read_hearbeat, ch_send, ch_send_AK_Whitelist;
 	WAM_AuthCtx a; a.type = AUTHS_NONE;
 	WAM_Key k; k.data = mykey; k.data_len = (uint16_t) strlen((char*)mykey);
 	uint8_t nonce[32];
 	uint32_t expected_size = 32, fixed_nonce_size = 32;
 	uint8_t  printed = 0;
-  IOTA_Index heartBeat_index, write_index, write_index_AkPub, write_index_whitelist;
+  IOTA_Index heartBeat_index, write_index, write_index_AK_Whitelist;
   FILE *index_file;
 
   if(!initialize_tpm(ek_handle, ak_handle)) {
@@ -165,30 +162,24 @@ void PoC_TPA(void *input) {
     fprintf(stdout, "Cannot open file\n");
     return ;
   }
-  get_Index_from_file(index_file, &heartBeat_index, &write_index, &write_index_AkPub, &write_index_whitelist);
+  get_Index_from_file(index_file, &heartBeat_index, &write_index, &write_index_AK_Whitelist);
   fclose(index_file);
 	
   // set read index of heatbeat
   WAM_init_channel(&ch_read_hearbeat, 1, &privatenet, &k, &a);
 	set_channel_index_read(&ch_read_hearbeat, heartBeat_index.index);
   // set write index for the AkPub
-  WAM_init_channel(&ch_send_AkPub, 1, &privatenet, &k, &a);
-  set_channel_index_write(&ch_send_AkPub, write_index_AkPub);
-  // set write index for the whitelist
-  WAM_init_channel(&ch_send_whitelist, 1, &privatenet, &k, &a);
-  set_channel_index_write(&ch_send_whitelist, write_index_whitelist);
+  WAM_init_channel(&ch_send_AK_Whitelist, 1, &privatenet, &k, &a);
+  set_channel_index_write(&ch_send_AK_Whitelist, write_index_AK_Whitelist);
   // Set write index for the quote 
   WAM_init_channel(&ch_send, 1, &privatenet, &k, &a);
   set_channel_index_write(&ch_send, write_index);
 
-  if(!sendAkPub_WAM(&ch_send_AkPub, &TpaData)) {
-    fprintf(stdout, "Could not write AK pub on tangle\n");
+  if(!send_AK_Whitelist_WAM(&ch_send_AK_Whitelist, &TpaData)) {
+    fprintf(stdout, "Could not write AK-Whitelist pub on tangle\n");
     return ;
   }
-  if(!sendWhitelist_WAM(&ch_send_whitelist)){
-    fprintf(stdout, "Could not write Whitelist on tangle\n");
-    return ;
-  }
+  fprintf(stdout, "AK-Whitelist published on tangle\n");
 
 	while(1){
     if(!printed){
@@ -363,8 +354,7 @@ exit:
   return true;
 }
 
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub,
-  IOTA_Index *write_index_whitelist) {
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AK_Whitelist) {
   int len_file;
   char *data = NULL;
    //get len of file
@@ -386,9 +376,9 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index->keys.pub, ED_PUBLIC_KEY_BYTES);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index->keys.priv, ED_PRIVATE_KEY_BYTES);
   
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_index")->valuestring, INDEX_HEX_SIZE, write_index_AkPub->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_AkPub->keys.pub, ED_PUBLIC_KEY_BYTES);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_AkPub->keys.priv, ED_PRIVATE_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_index")->valuestring, INDEX_HEX_SIZE, write_index_AK_Whitelist->index, INDEX_SIZE);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_AK_Whitelist->keys.pub, ED_PUBLIC_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_AK_Whitelist->keys.priv, ED_PRIVATE_KEY_BYTES);
 
   free(data);
 }
@@ -594,6 +584,7 @@ bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData) {
   for(i = 0; i < whitelistBlob.number_of_entries; i++)
     free(whitelistBlob.white_entries[i].path);
   free(whitelistBlob.white_entries);
+  return true;
 }
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle) {
