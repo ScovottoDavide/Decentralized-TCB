@@ -179,7 +179,7 @@ void PoC_TPA(void *input) {
     fprintf(stdout, "Could not write AK-Whitelist pub on tangle\n");
     return ;
   }
-  fprintf(stdout, "AK-Whitelist published on tangle\n");
+  fprintf(stdout, "AK-Whitelist published on tangle");
 
 	while(1){
     if(!printed){
@@ -578,6 +578,7 @@ bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData) {
   memcpy(to_send_data + acc, last, sizeof last);
   acc += sizeof last;
   
+  WAM_write(ch_send, to_send_data, (uint32_t)bytes_to_send, false);
 
   free(digest);
   free(to_send_data);
