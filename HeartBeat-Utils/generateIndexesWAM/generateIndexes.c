@@ -69,10 +69,8 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
     char *out, priv_hex[ED_PRIVATE_KEY_BYTES*2 + 1], pub_hex[ED_PUBLIC_KEY_BYTES*2 +1], index_hex[INDEX_HEX_SIZE];
     char base_index_str[20] = "read_index_"; 
     char base_pub_str[20] = "pub_key_";
-    char base_index_str_akpub[20] = "AkPub_read_"; 
-    char base_pub_str_akpub[30] = "AkPub_read_pubkey_";
-    char base_index_str_whitelist[30] = "whitelist_read_"; 
-    char base_pub_str_whitelist[40] = "whitelist_read_pubkey_";
+    char base_index_str_akpub[20] = "AK_White_read_"; 
+    char base_pub_str_akpub[30] = "AK_White_pubkey_";
     char base_index_str_status[30] = "status_read_"; 
     char base_pub_str_status[40] = "status_read_pubkey_";
 
@@ -136,9 +134,9 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
                 bin_2_hex(idx_AK_Whitelist[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
                 bin_2_hex(idx_AK_Whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
                 bin_2_hex(idx_AK_Whitelist[i].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-                cJSON_AddItemToObject(iota_index_json_TPA, "AkPub_priv_key", cJSON_CreateString(priv_hex));
-                cJSON_AddItemToObject(iota_index_json_TPA, "AkPub_pub_key", cJSON_CreateString(pub_hex));
-                cJSON_AddItemToObject(iota_index_json_TPA, "AkPub_index", cJSON_CreateString(index_hex));
+                cJSON_AddItemToObject(iota_index_json_TPA, "AK_White_priv_key", cJSON_CreateString(priv_hex));
+                cJSON_AddItemToObject(iota_index_json_TPA, "AK_White_pub_key", cJSON_CreateString(pub_hex));
+                cJSON_AddItemToObject(iota_index_json_TPA, "AK_White_index", cJSON_CreateString(index_hex));
 
                 bin_2_hex(idx_RA[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
                 bin_2_hex(idx_RA[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
