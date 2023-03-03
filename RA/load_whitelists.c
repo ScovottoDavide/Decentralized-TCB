@@ -8,21 +8,21 @@ int getIndexFromDigest(u_int8_t *ak_digest, WHITELIST_TABLE *whitelist_table, in
     return -1;
 }
 
-bool read_and_save_whitelist(WAM_channel *ch_read_whitelist, WHITELIST_TABLE *whitelist_table, int node_number) {
+bool read_and_save_whitelist(WAM_channel *ch_read, WHITELIST_TABLE *whitelist_table, int node_number) { 
     unsigned char expected_message[DATA_SIZE];
     uint32_t expected_size = DATA_SIZE, offset = 0;
-    uint8_t *read_whitelist_message = (uint8_t *) malloc(sizeof(uint8_t) * DATA_SIZE * 3), last[4] = "done";
+    uint8_t *read_whitelist_message = (uint8_t *) malloc(sizeof(uint8_t) * DATA_SIZE * 5), last[4] = "done";
     int acc = 0, i;
 
     do{
-        WAM_read(ch_read_whitelist, expected_message, &expected_size);
-        if(ch_read_whitelist->recv_bytes <= 0){
+        WAM_read(ch_read, expected_message, &expected_size);
+        if(ch_read->recv_bytes <= 0){
             fprintf(stdout, "Whitelist not uploaded!\n");
             return false;
         }
         memcpy(read_whitelist_message + offset, expected_message, DATA_SIZE);
         offset += DATA_SIZE;
-    }while(memcmp(last, read_whitelist_message + ch_read_whitelist->recv_bytes - sizeof last, sizeof last) != 0);
+    }while(memcmp(last, read_whitelist_message + ch_read->recv_bytes - sizeof last, sizeof last) != 0);
 
     memcpy(whitelist_table[node_number].ak_digest, read_whitelist_message + acc, sizeof(u_int8_t) * SHA256_DIGEST_LENGTH);
     whitelist_table[node_number].ak_digest[SHA256_DIGEST_LENGTH] = '\0';

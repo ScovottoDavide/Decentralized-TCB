@@ -72,19 +72,14 @@ void PoC_Verifier(void *input){
   cleanUpFolder("/etc/tc/TPA_AKs");
   srand((unsigned int)(time(NULL)));
   for(i = 0; i < nodes_number; i++){
-    int res = read_and_save_AKs(&WAM_ctx.ch_read_ak[i], IRdata_ctx.ak_table, IRdata_ctx.ak_files[i], i, &verifier_status, menuLock);
+    int res = read_AKs_Whitelists(&WAM_ctx.ch_read_AK_Whitelist[i], IRdata_ctx.ak_table, IRdata_ctx.whitelist_table, IRdata_ctx.ak_files[i], i, &verifier_status, menuLock);
     if(res < 0){
       fprintf(stdout, "Verifier Stopped while waiting for AK pubs of TPAs\n");
       goto early_end;
     }
   }
-  fprintf(stdout, "AK map constructed\n");
+  fprintf(stdout, "AK-Whitelist map constructed\n");
 
-  for(i = 0; i < nodes_number; i++){
-    if(!read_and_save_whitelist(&WAM_ctx.ch_read_whitelist[i], IRdata_ctx.whitelist_table, i))
-      goto early_end;
-  }
-  fprintf(stdout, "Whitelist map constructed\n");
   for(i = 0; i < nodes_number; i++)
     preparePCRSmap(IRdata_ctx.pcrs_mem, IRdata_ctx.ak_table, i);
   fprintf(stdout, "PCRS map constructed\n");

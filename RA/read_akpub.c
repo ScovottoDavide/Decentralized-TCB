@@ -29,26 +29,54 @@ char* rand_str(size_t length) {
     return dest;
 }
 
-// For now 1 node, 1 channel, 1 index!
-int read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex) {
+int read_AKs_Whitelists(WAM_channel *ch_read, AK_FILE_TABLE *ak_table, WHITELIST_TABLE *whitelist_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex) {
     unsigned char expected_message[DATA_SIZE], *akPub = NULL, *digest = NULL;
-    uint32_t expected_size = DATA_SIZE;
+    uint32_t expected_size = DATA_SIZE, offset = 0;
+    uint8_t *read_message = (uint8_t *) malloc(sizeof(uint8_t) * DATA_SIZE * 5), last[4] = "done";
     char filename[FILENAME_LEN+FILE_PEM_LEN] = {0}, base_url[16] = "/etc/tc/TPA_AKs/", *tmp;
+    size_t akPub_size = 0;
+    int acc = 0, i;
     base_url[16] = '\0';
 
-    while(ch_read_ak->recv_msg == 0){
-        WAM_read(ch_read_ak, expected_message, &expected_size);
+    do{
+        WAM_read(ch_read, expected_message, &expected_size);
+        if(ch_read->recv_bytes <= 0){
+            fprintf(stdout, "Whitelist not uploaded!\n");
+            return false;
+        }
+        memcpy(read_message + offset, expected_message, DATA_SIZE);
+        offset += DATA_SIZE;
         pthread_mutex_lock(&mutex); // Lock a mutex for heartBeat_Status
         if(*verifier_status == 1){
             pthread_mutex_unlock(&mutex); // Lock a mutex for heartBeat_Status
             return -2;
         }
         pthread_mutex_unlock(&mutex); // Lock a mutex for heartBeat_Status
+    }while(memcmp(last, read_message + ch_read->recv_bytes - sizeof last, sizeof last) != 0);
+
+    memcpy(whitelist_table[node_number].ak_digest, read_message + acc, sizeof(u_int8_t) * SHA256_DIGEST_LENGTH);
+    whitelist_table[node_number].ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+    acc += sizeof(u_int8_t) * SHA256_DIGEST_LENGTH;
+    memcpy(&whitelist_table[node_number].number_of_entries, read_message + acc, sizeof(u_int16_t));
+    acc += sizeof(u_int16_t);   
+    whitelist_table[node_number].white_entries = malloc(whitelist_table[node_number].number_of_entries * sizeof(struct whitelist_entry));
+    for(i = 0; i < whitelist_table[node_number].number_of_entries; i++) {
+        memcpy(&whitelist_table[node_number].white_entries[i].digest, read_message + acc, sizeof(u_int8_t) * SHA256_DIGEST_LENGTH * 2);
+        whitelist_table[node_number].white_entries[i].digest[SHA256_DIGEST_LENGTH*2] = '\0';
+        acc += sizeof(u_int8_t) * SHA256_DIGEST_LENGTH * 2;
+        memcpy(&whitelist_table[node_number].white_entries[i].path_len, read_message + acc, sizeof(u_int16_t));
+        acc += sizeof(u_int16_t);
+        whitelist_table[node_number].white_entries[i].path = malloc(sizeof(u_int8_t) * whitelist_table[node_number].white_entries[i].path_len + 1);
+        memcpy(whitelist_table[node_number].white_entries[i].path, read_message + acc, sizeof(u_int8_t) * whitelist_table[node_number].white_entries[i].path_len);
+        whitelist_table[node_number].white_entries[i].path[whitelist_table[node_number].white_entries[i].path_len] = '\0';
+        acc += sizeof(u_int8_t) * whitelist_table[node_number].white_entries[i].path_len;
     }
 
-    akPub = malloc((ch_read_ak->recv_bytes + 1) * sizeof(unsigned char));
-    memcpy(akPub, expected_message, ch_read_ak->recv_bytes);
-    akPub[ch_read_ak->recv_bytes] = '\0';
+    memcpy(&akPub_size, read_message + acc, sizeof(size_t));
+    acc += sizeof(size_t);
+    akPub = malloc((akPub_size + 1) * sizeof(unsigned char));
+    memcpy(akPub, read_message + acc, akPub_size * sizeof(unsigned char));
+    akPub[ch_read->recv_bytes] = '\0';
 
     // compute the filename and the whole path
     tmp = rand_str(FILENAME_LEN);
@@ -78,6 +106,7 @@ int read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak
     fwrite(akPub, 1, strlen(akPub), ak_file);
     fclose(ak_file);
 
+    free(read_message);
     free(akPub);
     free(digest);
     free(full_path);

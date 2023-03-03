@@ -386,13 +386,9 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index->keys.pub, ED_PUBLIC_KEY_BYTES);
   hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index->keys.priv, ED_PRIVATE_KEY_BYTES);
   
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_index")->valuestring, INDEX_HEX_SIZE, write_index_AkPub->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_AkPub->keys.pub, ED_PUBLIC_KEY_BYTES);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AkPub_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_AkPub->keys.priv, ED_PRIVATE_KEY_BYTES);
-  
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "whitelist_index")->valuestring, INDEX_HEX_SIZE, write_index_whitelist->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "whitelist_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_whitelist->keys.pub, ED_PUBLIC_KEY_BYTES);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "whitelist_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_whitelist->keys.priv, ED_PRIVATE_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_index")->valuestring, INDEX_HEX_SIZE, write_index_AkPub->index, INDEX_SIZE);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index_AkPub->keys.pub, ED_PUBLIC_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "AK_White_priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index_AkPub->keys.priv, ED_PRIVATE_KEY_BYTES);
 
   free(data);
 }
@@ -519,10 +515,11 @@ bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData) {
   unsigned char *digest = NULL;
   WHITELIST_BLOB whitelistBlob;
   uint8_t *to_send_data = NULL, last[4] = "done";
-  size_t bytes_to_send = 0, acc = 0;
+  size_t bytes_to_send = 0, acc = 0, akPub_size = 0;
   int num_entries = 0, i;
 
   bool res = openAKPub("/etc/tc/ak.pub.pem", &akPub);
+  akPub_size = strlen(akPub);
   if(!res) {
     fprintf(stderr, "Could not read AK pub\n");
     return false;
@@ -564,6 +561,7 @@ bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData) {
     bytes_to_send += whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t);
   }
   /*AK_DIGEST SIZE*/
+  bytes_to_send += sizeof(size_t);
   bytes_to_send += strlen(akPub); 
   bytes_to_send += sizeof last;
 
@@ -582,8 +580,11 @@ bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData) {
     acc += whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t);
   }
   /*AK_DIGEST ONLY*/
+  memcpy(to_send_data + acc, &akPub_size, sizeof(size_t));
+  acc += sizeof(size_t);
   memcpy(to_send_data + acc, akPub, strlen(akPub) * sizeof(unsigned char));
-
+  acc += strlen(akPub) * sizeof(unsigned char);
+  
   memcpy(to_send_data + acc, last, sizeof last);
   acc += sizeof last;
   

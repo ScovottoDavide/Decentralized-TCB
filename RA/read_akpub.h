@@ -8,6 +8,6 @@
 
 void cleanUpFolder(char *path);
 char* rand_str(size_t length);
-int read_and_save_AKs(WAM_channel *ch_read_ak, AK_FILE_TABLE *ak_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex);
+int read_AKs_Whitelists(WAM_channel *ch_read, AK_FILE_TABLE *ak_table, WHITELIST_TABLE *whitelist_table, FILE *ak_file, int node_number, volatile int *verifier_status, pthread_mutex_t mutex);
 
 #endif

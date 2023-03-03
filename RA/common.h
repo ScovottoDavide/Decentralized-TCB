@@ -140,8 +140,8 @@ void freeLate_IRdata_ctx(IRdata_ctx *ctx, int nodes_number);
 
 typedef struct WAM_ctx WAM_ctx;
 struct WAM_ctx {
-  IOTA_Index heartBeat_index, *read_indexes, *read_indexes_AkPub, *read_indexes_whitelist, write_response_index, *read_indexes_status;
-  WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak, *ch_read_whitelist, *ch_read_status;
+  IOTA_Index heartBeat_index, *read_indexes, *read_indexes_AK_Whitelist, write_response_index, *read_indexes_status;
+  WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_AK_Whitelist, *ch_read_status;
   FILE *index_file;
 };
 void WAM_ctx_alloc(WAM_ctx *ctx, int nodes_number, const char *file_index_path_name);
