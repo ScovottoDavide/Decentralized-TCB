@@ -1,11 +1,8 @@
-#include <tss2/tss2_esys.h>
-#include <openssl/sha.h>
-#include <openssl/evp.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <ctype.h>
+#if !defined(PCR9EXTEND_H)
+#define PCR9EXTEND_H
+
+#include "createak_util.h"
+#include "all_util.h"
 
 typedef struct tpm2_pcr_digest_spec tpm2_pcr_digest_spec;
 struct tpm2_pcr_digest_spec {
@@ -21,3 +18,4 @@ int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *d
 
 int tpm2_util_hex_to_byte_structure(const char *input_string, UINT16 *byte_length, BYTE *byte_buffer);
 TSS2_RC ExtendPCR9(ESYS_CONTEXT *ectx, const char* halg);
+#endif

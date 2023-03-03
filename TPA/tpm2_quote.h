@@ -1,12 +1,7 @@
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <openssl/evp.h>
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_tpm2_types.h>
-#include <tss2/tss2_mu.h>
-#include "../IMA/ima_read_writeOut_binary.h"
+#if !defined(TPM2_QUOTE_H)
+#define TPM2_QUOTE_H
+
+#include "all_util.h"
 
 #define ARRAY_LEN(x) sizeof(sizeof(x) / sizeof((x)[0]))
 
@@ -139,3 +134,4 @@ TSS2_RC get_internal_attested_data(TPM2B_ATTEST *quoted, TPMS_ATTEST *attest);
 // tpm2_quote_internal in createak_util.h --> to fix dependencies!!!!!!!!!
 
 TSS2_RC tpm2_quote(ESYS_CONTEXT *esys_ctx, TO_SEND *TpaData, ssize_t imaLogBytesSize, uint16_t *ak_handle);
+#endif

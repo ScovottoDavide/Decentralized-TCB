@@ -1,9 +1,6 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_tpm2_types.h>
+#if !defined(CREATEAK_UTIL_H)
+#define CREATEAK_UTIL_H
+#include "all_util.h"
 #include "createek_util.h"
 
 static bool filter_hierarchy_handles(TPMI_RH_PROVISION hierarchy, tpm2_handle_flags flags);
@@ -24,3 +21,4 @@ TSS2_RC tpm2_quote_internal(ESYS_CONTEXT *esys_context, tpm2_loaded_object *quot
     TPMT_SIG_SCHEME *in_scheme, TPM2B_DATA *qualifying_data,
     TPML_PCR_SELECTION *pcr_select, TPM2B_ATTEST **quoted,
     TPMT_SIGNATURE **signature);
+#endif

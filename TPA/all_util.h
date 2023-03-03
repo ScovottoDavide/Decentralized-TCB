@@ -1,9 +1,36 @@
+#if !defined(ALL_UTIL_H)
+#define ALL_UTIL_H
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <unistd.h>
+#include <pthread.h>
+
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tpm2_types.h>
+#include <tss2/tss2_mu.h>
+#include <tss2/tss2_tctildr.h>
+
+#include <openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+#include <openssl/rsa.h>
+#else
+#include <openssl/core_names.h>
+#include <openssl/params.h>
+#include <openssl/param_build.h>
+#endif
+
+#include "WAM/WAM.h"
+#include "../IMA/ima_read_writeOut_binary.h"
 
 #define HANDLE_SIZE 11
 
@@ -83,3 +110,4 @@ struct tpm2_loaded_object{
   const char *path;
   tpm2_session *session;
 };
+#endif

@@ -1,9 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <string.h>
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_tpm2_types.h>
+#if !defined(CREATEEK_UTIL_H)
+#define CREATEEK_UTIL_H
+
 #include "all_util.h"
 
 #define APPEND_CAPABILITY_INFORMATION(capability, field, subfield, max_count) \
@@ -56,3 +53,4 @@ TSS2_RC tpm2_session_close(tpm2_session **s);
 TSS2_RC tpm2_get_capability(ESYS_CONTEXT *esys_context, ESYS_TR shandle1, ESYS_TR shandle2, ESYS_TR shandle3, TPM2_CAP capability, UINT32 property, UINT32 property_count, TPMI_YES_NO *more_data, TPMS_CAPABILITY_DATA **capability_data);
 TSS2_RC tpm2_capability_get(ESYS_CONTEXT *ectx, TPM2_CAP capability, UINT32 property, UINT32 count, TPMS_CAPABILITY_DATA **capability_data);
 TSS2_RC tpm2_capability_find_vacant_persistent_handle(ESYS_CONTEXT *ctx, bool is_platform, TPMI_DH_PERSISTENT *vacant);
+#endif

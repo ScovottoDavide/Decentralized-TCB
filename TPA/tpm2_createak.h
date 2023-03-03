@@ -1,11 +1,9 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_tpm2_types.h>
+#if !defined(TPM2_CREATEAK_H)
+#define TPM2_CREATEAK_H
+
 #include "createak_util.h"
 #include "PEMconvertPub.h"
+#include "all_util.h"
 
 typedef struct createak_context createak_context;
 struct createak_context {
@@ -46,3 +44,4 @@ static TSS2_RC init_ak_public(const char* alg_details, TPM2B_PUBLIC *public);
 static TSS2_RC create_ak(ESYS_CONTEXT *ectx, uint16_t *ak_handle);
 TSS2_RC tpm2_tool_onrun(ESYS_CONTEXT *ectx, uint16_t *ek_handle, uint16_t *ak_handle);
 TSS2_RC tpm2_createak(ESYS_CONTEXT *ectx, uint16_t *ek_handle, uint16_t *ak_handle);
+#endif

@@ -1,5 +1,4 @@
 #include "PCR9Extend.h"
-#include "createak_util.h"
 
 typedef struct tpm_pcr_extend_ctx tpm_pcr_extend_ctx;
 struct tpm_pcr_extend_ctx {

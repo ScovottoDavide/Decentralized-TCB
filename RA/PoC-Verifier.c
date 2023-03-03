@@ -180,8 +180,7 @@ void PoC_Verifier(void *input){
             
             if(IRdata_ctx.local_trust_status.status_entries[i].status == 1){
               fprintf(stdout, "Node ID: "); hex_print(IRdata_ctx.local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> T\n");
-            }
-            else{
+            } else{
               fprintf(stdout, "Node ID: "); hex_print(IRdata_ctx.local_trust_status.status_entries[i].ak_digest, SHA256_DIGEST_LENGTH); fprintf(stdout, " --> NT\n");
               support_ctx.invalid_channels_attest[i] = 1;
             } 

@@ -1,3 +1,6 @@
+#if !defined(IMA_READ_WRITEOUT_BINARY_H)
+#define IMA_READ_WRITEOUT_BINARY_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -42,3 +45,4 @@ typedef struct {
 
 static int read_template_data(struct event *template, FILE *fp, struct event_blob *blob_template);
 int read_write_IMAb(const char *path, IMA_LOG_BLOB *ima_log_blob, ssize_t imaLogBytesSize);
+#endif

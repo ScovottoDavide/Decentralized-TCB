@@ -1,18 +1,8 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <openssl/rand.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <tss2/tss2_esys.h>
-#include <tss2/tss2_tctildr.h>
-#include <time.h>
+#include "all_util.h"
 #include "tpm2_createek.h"
 #include "tpm2_createak.h"
 #include "tpm2_quote.h"
 #include "PCR9Extend.h"
-#include "WAM/WAM.h"
-//#include "../IMA/ima_read_writeOut_binary.h"
 
 #define BILLION  1000000000L;
 
