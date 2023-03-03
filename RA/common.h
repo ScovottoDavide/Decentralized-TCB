@@ -25,22 +25,19 @@
 #include "WAM/WAM.h"
 #include "../Consensous/consensous.h"
 
-typedef struct
-{
+typedef struct {
   u_int8_t tag; // 0
   u_int16_t size;
   u_int8_t buffer[32];
 } NONCE_BLOB;
 
-typedef struct
-{
+typedef struct {
   u_int8_t tag; //1
   u_int16_t size;
   u_int8_t *buffer;
 } SIG_BLOB;
 
-typedef struct
-{
+typedef struct {
   u_int8_t tag; //2
   u_int16_t size;
   u_int8_t *buffer; // Allocate on the fly
@@ -122,20 +119,7 @@ typedef struct{
   void menu(void *in);
 /* ----------------------------- */
 
-bool legal_int(const char *str);
-bool openAKPub(const char *path, unsigned char **akPub);
-int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest);
-u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_number);
-int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
-bool get_my_ak_digest(uint8_t *my_ak_digest);
-bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
-            TO_SEND TpaData, int nodes_number);
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *read_indexes, 
-    IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, IOTA_Index *read_indexes_status, int nodes_number);
-void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
-void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number);
-int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE local_trust_status, int *invalid_channels_status, pthread_mutex_t *menuLock, volatile int verifier_status);
-
+/* LOCAL REMOTE ATTESTOR DATA STRUCTURES AND PROTOTYPES */
 typedef struct IRdata_ctx IRdata_ctx;
 struct IRdata_ctx {
   TO_SEND *TpaData; 
@@ -147,8 +131,46 @@ struct IRdata_ctx {
   STATUS_TABLE local_trust_status;
   unsigned char *pcr9_sha1; 
   unsigned char *pcr9_sha256;
+  FILE **ak_files;
 };
 
-void init_IRdata(IRdata_ctx *ctx, int nodes_number);
+void init_IRdata_ctx(IRdata_ctx *ctx, int nodes_number);
+void freeEarly_IRdata_ctx(IRdata_ctx *ctx, int nodes_number);
+void freeLate_IRdata_ctx(IRdata_ctx *ctx, int nodes_number);
 
+typedef struct WAM_ctx WAM_ctx;
+struct WAM_ctx {
+  IOTA_Index heartBeat_index, *read_indexes, *read_indexes_AkPub, *read_indexes_whitelist, write_response_index, *read_indexes_status;
+  WAM_channel ch_read_hearbeat, *ch_read_attest, ch_write_response, *ch_read_ak, *ch_read_whitelist, *ch_read_status;
+  FILE *index_file;
+};
+void WAM_ctx_alloc(WAM_ctx *ctx, int nodes_number, const char *file_index_path_name);
+void WAM_ctx_init_channels(WAM_ctx *ctx, int nodes_number, IOTA_Endpoint *privatenet, WAM_Key *k, WAM_AuthCtx *a);
+void free_WAM_ctx(WAM_ctx *ctx);
+
+typedef struct support_ctx support_ctx;
+struct support_ctx {
+  int *verified_nodes, *attest_messages_sizes, attest_messages_size_increment, *invalid_channels_attest, *invalid_channels_status;
+  uint32_t expected_size, expected_size_attest_message, *offset, fixed_nonce_size;
+	uint8_t **read_attest_message, expected_attest_message[DATA_SIZE], nonce[32], last[4];
+  uint16_t *previous_msg_num;
+};
+
+void init_Support_ctx(support_ctx *ctx, int nodes_number);
+void freeEarly_support_ctx(support_ctx *ctx);
+void freeLate_support_ctx(support_ctx *ctx, int nodes_number);
+/* ---------------------------------------------------- */
+
+bool legal_int(const char *str);
+bool openAKPub(const char *path, unsigned char **akPub);
+int computeDigestEVP(unsigned char* akPub, const char* sha_alg, unsigned char *digest);
+u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_number);
+int computePCRsoftBinding(unsigned char *pcr_concatenated, const char *sha_alg, unsigned char *digest, int size);
+bool get_my_ak_digest(uint8_t *my_ak_digest);
+bool PCR9_calculation(unsigned char *expected_PCR9sha1, unsigned char *expected_PCR9sha256, AK_FILE_TABLE *ak_table,
+            TO_SEND TpaData, int nodes_number);
+void get_Index_from_file(WAM_ctx *ctx, int nodes_number);
+void parseTPAdata(TO_SEND *TpaData, uint8_t *read_attest_message, int node_number);
+void sendLocalTrustStatus(WAM_channel *ch_send, STATUS_TABLE local_trust_status, int nodes_number);
+int readOthersTrustTables_Consensus(WAM_channel *ch_read_status, int nodes_number, STATUS_TABLE local_trust_status, int *invalid_channels_status, pthread_mutex_t *menuLock, volatile int verifier_status);
 #endif

@@ -1,6 +1,7 @@
 #include "common.h"
 
-void init_IRdata(IRdata_ctx *ctx, int nodes_number) {
+/* IR data context initialization and free functions */
+void init_IRdata_ctx(IRdata_ctx *ctx, int nodes_number) {
   ctx->TpaData = malloc(nodes_number * sizeof(TO_SEND));
   ctx->ver_response = malloc(nodes_number * sizeof(VERIFICATION_RESPONSE));
   ctx->ak_table = malloc(nodes_number * sizeof(AK_FILE_TABLE));
@@ -14,7 +15,134 @@ void init_IRdata(IRdata_ctx *ctx, int nodes_number) {
   }
   ctx->pcr9_sha1 = malloc((SHA_DIGEST_LENGTH + 1) * sizeof(unsigned char));
   ctx->pcr9_sha256 = malloc((SHA256_DIGEST_LENGTH + 1) * sizeof(unsigned char));
+  ctx->ak_files = malloc(nodes_number * sizeof(FILE *));
+
+  for(int i = 0; i < nodes_number; i++){
+    ctx->ver_response[i].number_white_entries = 0;
+    // THE MAX NUMBER OF UNTRUSTED ENTRIES = THE NUMBER OF WHITELIST ENTRIES (WORST SCENARIO)
+    ctx->ver_response[i].untrusted_entries = malloc(ctx->whitelist_table[i].number_of_entries * sizeof(UNTRUSTED_PATH));
+  }
+  
+  // Initialize local trust status --> all T before verifying them
+   if(!get_my_ak_digest(ctx->local_trust_status.from_ak_digest)) {
+    fprintf(stdout, "Could not calculate my ak digest\n");
+  }
+  for(int i = 0; i < nodes_number; i++)
+    ctx->local_trust_status.status_entries[i].status = 1;
+  ctx->local_trust_status.number_of_entries = nodes_number;
 }
+
+void freeEarly_IRdata_ctx(IRdata_ctx *ctx, int nodes_number) {
+  free(ctx->TpaData); free(ctx->ver_response); free(ctx->ak_table); free(ctx->whitelist_table);
+  for(int i = 0; i < nodes_number; i++){
+    free(ctx->pcrs_mem[i].pcr10_sha1);
+    free(ctx->pcrs_mem[i].pcr10_sha256);
+  }
+  free(ctx->pcrs_mem);
+  free(ctx->pcr9_sha1); free(ctx->pcr9_sha256);
+  free(ctx->local_trust_status.status_entries);
+  free(ctx->ak_files);
+}
+
+void freeLate_IRdata_ctx(IRdata_ctx *ctx, int nodes_number) {
+  for(int i = 0; i < nodes_number; i++){
+    free(ctx->TpaData[i].sig_blob.buffer);
+    free(ctx->TpaData[i].message_blob.buffer);
+    free(ctx->TpaData[i].ak_digest_blob.buffer);
+    free(ctx->ak_table[i].path_name);
+    for(int j = 0; j < ctx->ver_response[i].number_white_entries; j++)
+      free(ctx->ver_response[i].untrusted_entries[j].untrusted_path_name);
+    for(int j = 0; j < ctx->whitelist_table[i].number_of_entries; j++)
+      if(ctx->whitelist_table[i].white_entries[j].path != NULL)
+        free(ctx->whitelist_table[i].white_entries[j].path);
+    free(ctx->whitelist_table[i].white_entries);
+    free(ctx->ver_response[i].untrusted_entries);
+  }
+}
+/* -------------------------------------------------- */
+
+/* Local WAM context initialization and free functions */
+void WAM_ctx_alloc(WAM_ctx *ctx, int nodes_number, const char *file_index_path_name) {
+  ctx->ch_read_attest = malloc(nodes_number * sizeof(WAM_channel));
+  ctx->ch_read_ak = malloc(nodes_number * sizeof(WAM_channel));
+  ctx->ch_read_whitelist = malloc(nodes_number * sizeof(WAM_channel));
+  ctx->ch_read_status = malloc(nodes_number * sizeof(WAM_channel));
+
+  ctx->read_indexes = malloc(nodes_number * sizeof(IOTA_Index));
+  ctx->read_indexes_AkPub = malloc(nodes_number * sizeof(IOTA_Index));
+  ctx->read_indexes_whitelist = malloc(nodes_number * sizeof(IOTA_Index));
+  ctx->read_indexes_status = malloc(nodes_number * sizeof(IOTA_Index));
+
+  ctx->index_file = fopen(file_index_path_name, "r");
+  if(ctx->index_file == NULL){
+    fprintf(stdout, "Cannot open index file\n");
+    return ;
+  }
+  get_Index_from_file(ctx, nodes_number);
+  fclose(ctx->index_file);
+}
+
+void WAM_ctx_init_channels(WAM_ctx *ctx, int nodes_number, IOTA_Endpoint *privatenet, WAM_Key *k, WAM_AuthCtx *a) {
+ // Set read index of heartbeat
+  WAM_init_channel(&ctx->ch_read_hearbeat, 1, privatenet, k, a);
+	set_channel_index_read(&ctx->ch_read_hearbeat, ctx->heartBeat_index.index);
+  // Set indexes for reading TpaData
+  for(int i = 0; i < nodes_number; i++){
+    WAM_init_channel(&ctx->ch_read_attest[i], i, privatenet, k, a);
+    set_channel_index_read(&ctx->ch_read_attest[i], ctx->read_indexes[i].index);
+    // Set indexes for reading Tpas AK
+    WAM_init_channel(&ctx->ch_read_ak[i], i, privatenet, k, a);
+    set_channel_index_read(&ctx->ch_read_ak[i], ctx->read_indexes_AkPub[i].index);
+    // Set indexes for reading Tpas whitelists
+    WAM_init_channel(&ctx->ch_read_whitelist[i], i, privatenet, k, a);
+    set_channel_index_read(&ctx->ch_read_whitelist[i], ctx->read_indexes_whitelist[i].index);
+    // Set indexes for reading RAs local status
+    WAM_init_channel(&ctx->ch_read_status[i], i, privatenet, k, a);
+    set_channel_index_read(&ctx->ch_read_status[i], ctx->read_indexes_status[i].index);
+  }
+  // Set write index for response to heartbeat 
+  WAM_init_channel(&ctx->ch_write_response, 1, privatenet, k, a);
+  set_channel_index_write(&ctx->ch_write_response, ctx->write_response_index);
+}
+
+void free_WAM_ctx(WAM_ctx *ctx) {
+  free(ctx->ch_read_attest); free(ctx->ch_read_ak); free(ctx->ch_read_whitelist); free(ctx->ch_read_status);
+  free(ctx->read_indexes); free(ctx->read_indexes_AkPub); free(ctx->read_indexes_whitelist); free(ctx->read_indexes_status);
+}
+/* --------------------------------------------------- */
+
+/* Support context initialization and free functions */
+void init_Support_ctx(support_ctx *ctx, int nodes_number) {
+  ctx->offset = malloc(nodes_number * sizeof(uint32_t));
+  ctx->previous_msg_num = malloc(nodes_number * sizeof(uint16_t));
+  ctx->verified_nodes = calloc(nodes_number, sizeof(int));
+  ctx->attest_messages_sizes = malloc(nodes_number * sizeof(int));
+  ctx->invalid_channels_attest = calloc(nodes_number, sizeof(int));
+  ctx->invalid_channels_status = calloc(nodes_number, sizeof(int));
+
+  ctx->attest_messages_size_increment = 1024 * 10;
+  ctx->expected_size = 32; ctx->expected_size_attest_message = DATA_SIZE; ctx->fixed_nonce_size = 32;
+  strncpy(ctx->last, "done", 4);
+
+  for(int i = 0; i < nodes_number; i++) ctx->attest_messages_sizes[i] = 1024 * 100 * 2;
+  ctx->read_attest_message = (uint8_t **) malloc(nodes_number * sizeof(uint8_t *));
+  for(int i = 0; i < nodes_number; i++)
+    ctx->read_attest_message[i] = (uint8_t *) malloc(sizeof(uint8_t) * ctx->attest_messages_sizes[i]);
+}
+
+void freeEarly_support_ctx(support_ctx *ctx) {
+  free(ctx->offset); free(ctx->previous_msg_num);
+  free(ctx->verified_nodes);
+  free(ctx->invalid_channels_attest);
+  free(ctx->invalid_channels_status);
+}
+
+void freeLate_support_ctx(support_ctx *ctx, int nodes_number) {
+  for(int i = 0; i < nodes_number; i++)
+      free(ctx->read_attest_message[i]);
+  if(ctx->read_attest_message != NULL) free(ctx->read_attest_message);
+}
+/* --------------------------------------------------- */
 
 int my_gets_avoid_bufferoverflow(char *buffer, size_t buffer_len) {
     // Clear buffer to ensure the string will be null terminated
@@ -88,8 +216,7 @@ u_int8_t* get_ak_file_path(AK_FILE_TABLE *ak_table, TO_SEND TpaData, int nodes_n
   return NULL;
 }
 
-void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *read_indexes, 
-    IOTA_Index *read_indexes_AkPub, IOTA_Index *read_indexes_whitelist, IOTA_Index *read_indexes_status, int nodes_number) {
+void get_Index_from_file(WAM_ctx *ctx, int nodes_number) {
   int len_file, i = 0;
   char *data = NULL, read_index_base_str[20] = "read_index_", akread_index_base_str[20] = "AkPub_read_";
   char akpub_index_base_str[20]="pub_key_", index_AkPub_base_str[25]="AkPub_read_pubkey_";
@@ -97,47 +224,47 @@ void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Ind
   char base_index_str_status[30] = "status_read_", base_pub_str_status[40] = "status_read_pubkey_";
 
   //get len of file
-  fseek(index_file, 0L, SEEK_END);
-  len_file = ftell(index_file);
-  fseek(index_file, 0L, SEEK_SET);
+  fseek(ctx->index_file, 0L, SEEK_END);
+  len_file = ftell(ctx->index_file);
+  fseek(ctx->index_file, 0L, SEEK_SET);
 
   // read the data from the file 
   data = (char*) malloc((len_file + 1)*sizeof(char));
-  fread(data, 1, len_file, index_file);
+  fread(data, 1, len_file, ctx->index_file);
   data[len_file] = '\0';
 
   cJSON *json = cJSON_Parse(data);
   
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "index")->valuestring, INDEX_HEX_SIZE, write_index->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, write_index->keys.pub, ED_PUBLIC_KEY_BYTES);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, write_index->keys.priv, ED_PRIVATE_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "index")->valuestring, INDEX_HEX_SIZE, ctx->write_response_index.index, INDEX_SIZE);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, ctx->write_response_index.keys.pub, ED_PUBLIC_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "priv_key")->valuestring, (ED_PRIVATE_KEY_BYTES * 2) + 1, ctx->write_response_index.keys.priv, ED_PRIVATE_KEY_BYTES);
 
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "heartbeat")->valuestring, INDEX_HEX_SIZE, heartBeat_index->index, INDEX_SIZE);
-  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "heartBeat_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, heartBeat_index->keys.pub, ED_PUBLIC_KEY_BYTES);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "heartbeat")->valuestring, INDEX_HEX_SIZE, ctx->heartBeat_index.index, INDEX_SIZE);
+  hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, "heartBeat_pub_key")->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, ctx->heartBeat_index.keys.pub, ED_PUBLIC_KEY_BYTES);
 
   for(i = 0; i < nodes_number; i++){
     read_index_base_str[11] = (i + 1) + '0';
     akpub_index_base_str[8] = (i + 1) + '0';
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, read_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes[i].index, INDEX_SIZE);
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akpub_index_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, read_index_base_str)->valuestring, INDEX_HEX_SIZE, ctx->read_indexes[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akpub_index_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, ctx->read_indexes[i].keys.pub, ED_PUBLIC_KEY_BYTES);
   }
   for(i = 0; i < nodes_number; i++){
     akread_index_base_str[11] = (i + 1) + '0';
     index_AkPub_base_str[18] = (i + 1) + '0';
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akread_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes_AkPub[i].index, INDEX_SIZE);
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, index_AkPub_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_AkPub[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, akread_index_base_str)->valuestring, INDEX_HEX_SIZE, ctx->read_indexes_AkPub[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, index_AkPub_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, ctx->read_indexes_AkPub[i].keys.pub, ED_PUBLIC_KEY_BYTES);
   }
   for(i = 0; i < nodes_number; i++){
     whitelist_index_base_str[15] = (i + 1) + '0';
     whitelist_index_read_base_str[22] = (i + 1) + '0';
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_base_str)->valuestring, INDEX_HEX_SIZE, read_indexes_whitelist[i].index, INDEX_SIZE);
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_read_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_base_str)->valuestring, INDEX_HEX_SIZE, ctx->read_indexes_whitelist[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, whitelist_index_read_base_str)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, ctx->read_indexes_whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES);
   }
   for(i = 0; i < nodes_number; i++){
     base_index_str_status[12] = (i + 1) + '0';
     base_pub_str_status[19] = (i + 1) + '0';
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, base_index_str_status)->valuestring, INDEX_HEX_SIZE, read_indexes_status[i].index, INDEX_SIZE);
-    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, base_pub_str_status)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, read_indexes_status[i].keys.pub, ED_PUBLIC_KEY_BYTES);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, base_index_str_status)->valuestring, INDEX_HEX_SIZE, ctx->read_indexes_status[i].index, INDEX_SIZE);
+    hex_2_bin(cJSON_GetObjectItemCaseSensitive(json, base_pub_str_status)->valuestring, (ED_PUBLIC_KEY_BYTES * 2) + 1, ctx->read_indexes_status[i].keys.pub, ED_PUBLIC_KEY_BYTES);
   }
   
   free(data);
