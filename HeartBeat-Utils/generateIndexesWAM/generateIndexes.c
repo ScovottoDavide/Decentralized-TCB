@@ -162,8 +162,8 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
                 //read indexes for RA to read AkPubs_and_Whitelists
                 bin_2_hex(idx_AK_Whitelist[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
                 bin_2_hex(idx_AK_Whitelist[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-                base_index_str_akpub[11] = (k + 1) + '0';
-                base_pub_str_akpub[18] = (k + 1) + '0';
+                base_index_str_akpub[14] = (k + 1) + '0';
+                base_pub_str_akpub[16] = (k + 1) + '0';
                 cJSON_AddItemToObject(iota_index_json_RA, base_index_str_akpub, cJSON_CreateString(index_hex));
                 cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_akpub, cJSON_CreateString(pub_hex));
 
