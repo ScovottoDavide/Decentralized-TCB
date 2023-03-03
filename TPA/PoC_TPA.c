@@ -179,7 +179,7 @@ void PoC_TPA(void *input) {
     fprintf(stdout, "Could not write AK-Whitelist pub on tangle\n");
     return ;
   }
-  fprintf(stdout, "AK-Whitelist published on tangle");
+  fprintf(stdout, "AK-Whitelist published on tangle\n");
 
 	while(1){
     if(!printed){
