@@ -154,4 +154,13 @@ typedef struct {
   u_int16_t number_of_entries;
   struct whitelist_entry *white_entries;
 } WHITELIST_BLOB;
+
+bool initialize_tpm(uint16_t *ek_handle, uint16_t *ak_handle);
+int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle);
+bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size);
+bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData);
+int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
+bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
+void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AK_Whitelist); 
+void hex_print(uint8_t *raw_data, size_t raw_size);
 #endif
