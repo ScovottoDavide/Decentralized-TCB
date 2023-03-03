@@ -1,10 +1,10 @@
 #include <string.h>
 #include "WAM/WAM.h"
 
-void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *indexes_TPA_AkPub, IOTA_Index *indexes_whitelist_TPA, IOTA_Index heartBeat_index, int number_of_indexes);
+void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx_AK_Whitelist, IOTA_Index heartBeat_index, int number_of_indexes);
 
 int main(int argc, char *argv[]) {
-    IOTA_Index *indexes_TPA, *indexes_RA, *indexes_TPA_AkPub, *indexes_whitelist_TPA, heartBeat_index;
+    IOTA_Index *indexes_TPA, *indexes_RA, *indexes_AK_Whitelist, heartBeat_index;
     FILE *heartbeatWriteIndex_file;
     int number_of_indexes = 0, i;
 
@@ -30,13 +30,8 @@ int main(int argc, char *argv[]) {
         fprintf(stdout, "OOM\n");
         return -1;
     }
-    indexes_TPA_AkPub = (IOTA_Index *) malloc(sizeof(IOTA_Index) * number_of_indexes); // write indexes for TPA's AkPub  
-    if(indexes_TPA_AkPub == NULL){
-        fprintf(stdout, "OOM\n");
-        return -1;
-    }
-    indexes_whitelist_TPA = (IOTA_Index *) malloc(sizeof(IOTA_Index) * number_of_indexes); // write indexes for TPA's whitelists  
-    if(indexes_whitelist_TPA == NULL){
+    indexes_AK_Whitelist = (IOTA_Index *) malloc(sizeof(IOTA_Index) * number_of_indexes); // write indexes for TPA's AkPub  
+    if(indexes_AK_Whitelist == NULL){
         fprintf(stdout, "OOM\n");
         return -1;
     }
@@ -51,11 +46,7 @@ int main(int argc, char *argv[]) {
     }
     // TPA write indexes --> write AkPub
     for(i = 0; i < number_of_indexes; i++) {
-        generate_iota_index(&(indexes_TPA_AkPub[i]));
-    }
-    // TPA write indexes --> write whitelists
-    for(i = 0; i < number_of_indexes; i++) {
-        generate_iota_index(&(indexes_whitelist_TPA[i]));
+        generate_iota_index(&(indexes_AK_Whitelist[i]));
     }
     // RA write indexes --> write response of verification
     for(i = 0; i < number_of_indexes; i++) {
@@ -63,7 +54,7 @@ int main(int argc, char *argv[]) {
     }
 
     fprintf(stdout, "Generating index files...\n");
-    generateIndexFiles(indexes_TPA, indexes_RA, indexes_TPA_AkPub, indexes_whitelist_TPA, heartBeat_index, number_of_indexes);
+    generateIndexFiles(indexes_TPA, indexes_RA, indexes_AK_Whitelist, heartBeat_index, number_of_indexes);
     fprintf(stdout, "DONE\n");
 
     free(indexes_TPA);
@@ -71,7 +62,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx_TPA_AkPub, IOTA_Index *idx_TPA_whitelist, IOTA_Index heartBeat_index, int number_of_indexes) {
+void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx_AK_Whitelist, IOTA_Index heartBeat_index, int number_of_indexes) {
     FILE **index_files_TPA, **index_files_RA, *heartbeatWriteIndex_file;
     int i, j, k = 0;
     cJSON *iota_index_json_TPA, *iota_index_json_RA, *heartbeat_json;
@@ -134,7 +125,7 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
         }
 
         for(j = 0; j < number_of_indexes; j++) {
-            if(j == i) { // write index (for TPA [1 for TpaData + 1 for AkPub + 1 for the whitelist] and RA)
+            if(j == i) { // write index (for TPA [1 for TpaData + 1 for AkPub_and_whitelist] and RA)
                 bin_2_hex(idx_TPA[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
                 bin_2_hex(idx_TPA[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
                 bin_2_hex(idx_TPA[i].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
@@ -142,19 +133,12 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
                 cJSON_AddItemToObject(iota_index_json_TPA, "pub_key", cJSON_CreateString(pub_hex));
                 cJSON_AddItemToObject(iota_index_json_TPA, "index", cJSON_CreateString(index_hex));
 
-                bin_2_hex(idx_TPA_AkPub[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
-                bin_2_hex(idx_TPA_AkPub[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-                bin_2_hex(idx_TPA_AkPub[i].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
+                bin_2_hex(idx_AK_Whitelist[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
+                bin_2_hex(idx_AK_Whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
+                bin_2_hex(idx_AK_Whitelist[i].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
                 cJSON_AddItemToObject(iota_index_json_TPA, "AkPub_priv_key", cJSON_CreateString(priv_hex));
                 cJSON_AddItemToObject(iota_index_json_TPA, "AkPub_pub_key", cJSON_CreateString(pub_hex));
                 cJSON_AddItemToObject(iota_index_json_TPA, "AkPub_index", cJSON_CreateString(index_hex));
-
-                bin_2_hex(idx_TPA_whitelist[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
-                bin_2_hex(idx_TPA_whitelist[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-                bin_2_hex(idx_TPA_whitelist[i].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-                cJSON_AddItemToObject(iota_index_json_TPA, "whitelist_priv_key", cJSON_CreateString(priv_hex));
-                cJSON_AddItemToObject(iota_index_json_TPA, "whitelist_pub_key", cJSON_CreateString(pub_hex));
-                cJSON_AddItemToObject(iota_index_json_TPA, "whitelist_index", cJSON_CreateString(index_hex));
 
                 bin_2_hex(idx_RA[i].keys.priv, ED_PRIVATE_KEY_BYTES, priv_hex, (ED_PRIVATE_KEY_BYTES*2 +1));
                 bin_2_hex(idx_RA[i].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
@@ -177,21 +161,13 @@ void generateIndexFiles(IOTA_Index *idx_TPA, IOTA_Index *idx_RA, IOTA_Index *idx
                 cJSON_AddItemToObject(iota_index_json_RA, base_index_str, cJSON_CreateString(index_hex));
                 cJSON_AddItemToObject(iota_index_json_RA, base_pub_str, cJSON_CreateString(pub_hex));
 
-                //read indexes for RA to read AkPubs
-                bin_2_hex(idx_TPA_AkPub[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-                bin_2_hex(idx_TPA_AkPub[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
+                //read indexes for RA to read AkPubs_and_Whitelists
+                bin_2_hex(idx_AK_Whitelist[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
+                bin_2_hex(idx_AK_Whitelist[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
                 base_index_str_akpub[11] = (k + 1) + '0';
                 base_pub_str_akpub[18] = (k + 1) + '0';
                 cJSON_AddItemToObject(iota_index_json_RA, base_index_str_akpub, cJSON_CreateString(index_hex));
                 cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_akpub, cJSON_CreateString(pub_hex));
-
-                //read indexes for RA to read whitelists
-                bin_2_hex(idx_TPA_whitelist[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);
-                bin_2_hex(idx_TPA_whitelist[j].keys.pub, ED_PUBLIC_KEY_BYTES, pub_hex, (ED_PUBLIC_KEY_BYTES*2 +1));
-                base_index_str_whitelist[15] = (k + 1) + '0';
-                base_pub_str_whitelist[22] = (k + 1) + '0';
-                cJSON_AddItemToObject(iota_index_json_RA, base_index_str_whitelist, cJSON_CreateString(index_hex));
-                cJSON_AddItemToObject(iota_index_json_RA, base_pub_str_whitelist, cJSON_CreateString(pub_hex));
 
                 // read indexes for RA to read others local status
                 bin_2_hex(idx_RA[j].index, INDEX_SIZE, index_hex, INDEX_HEX_SIZE);

@@ -33,6 +33,7 @@
 #include "../IMA/ima_read_writeOut_binary.h"
 
 #define HANDLE_SIZE 11
+#define MAX_RSA_KEY_BYTES ((2048 + 7) / 8)
 
 typedef enum tpm2_handle_flags tpm2_handle_flags;
 enum tpm2_handle_flags {
@@ -110,4 +111,47 @@ struct tpm2_loaded_object{
   const char *path;
   tpm2_session *session;
 };
+
+typedef struct {
+  u_int8_t tag; // 0
+  u_int16_t size;
+  u_int8_t buffer[32];
+} NONCE_BLOB;
+
+typedef struct {
+  u_int8_t tag; // 1
+  u_int16_t size;
+  u_int8_t buffer[MAX_RSA_KEY_BYTES];
+} SIG_BLOB;
+
+typedef struct {
+  u_int8_t tag; // 2
+  u_int16_t size;
+  u_int8_t buffer[sizeof(TPMS_ATTEST)];
+} MESSAGE_BLOB;
+
+typedef struct {
+  u_int8_t tag; // 3
+  u_int16_t size;
+  u_int8_t *buffer;
+} AK_DIGEST_BLOB;
+
+typedef struct {
+  NONCE_BLOB nonce_blob;
+  SIG_BLOB sig_blob;
+  MESSAGE_BLOB message_blob;
+  IMA_LOG_BLOB ima_log_blob; // defined in /IMA/ima_read_writeOut_binary.h
+  AK_DIGEST_BLOB ak_digest_blob;
+} TO_SEND;
+
+struct whitelist_entry {
+    u_int8_t digest[SHA256_DIGEST_LENGTH*2+1];
+    u_int16_t path_len;
+    char *path;
+};
+typedef struct {
+  u_int8_t ak_digest[SHA256_DIGEST_LENGTH+1];
+  u_int16_t number_of_entries;
+  struct whitelist_entry *white_entries;
+} WHITELIST_BLOB;
 #endif

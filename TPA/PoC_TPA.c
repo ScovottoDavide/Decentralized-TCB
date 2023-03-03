@@ -12,6 +12,7 @@ bool loadWhitelist(FILE *fp, struct whitelist_entry *white_entries, int size);
 bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist);
 bool sendAkPub_WAM(WAM_channel *ch_send_AkPub, TO_SEND *TpaData);
 int sendDataToRA_WAM(TO_SEND TpaData, ssize_t *imaLogBytesSize, WAM_channel *ch_send);
+bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData);
 bool pcr_check_if_zeros(ESYS_CONTEXT *esys_context);
 void get_Index_from_file(FILE *index_file, IOTA_Index *heartBeat_index, IOTA_Index *write_index, IOTA_Index *write_index_AkPub,
   IOTA_Index *write_index_whitelist);
@@ -511,6 +512,87 @@ bool sendWhitelist_WAM(WAM_channel *ch_send_whitelist) {
     free(whitelistBlob.white_entries[i].path);
   free(whitelistBlob.white_entries);
   return true;
+}
+
+bool send_AK_Whitelist_WAM(WAM_channel *ch_send, TO_SEND *TpaData) {
+  unsigned char *akPub = NULL;
+  unsigned char *digest = NULL;
+  WHITELIST_BLOB whitelistBlob;
+  uint8_t *to_send_data = NULL, last[4] = "done";
+  size_t bytes_to_send = 0, acc = 0;
+  int num_entries = 0, i;
+
+  bool res = openAKPub("/etc/tc/ak.pub.pem", &akPub);
+  if(!res) {
+    fprintf(stderr, "Could not read AK pub\n");
+    return false;
+  }
+
+  digest = malloc((EVP_MAX_MD_SIZE)*sizeof(unsigned char));
+  int md_len = computeDigestEVP(akPub, "sha256", digest);
+  if(md_len <= 0)
+    return false;
+  TpaData->ak_digest_blob.tag = 3;
+  TpaData->ak_digest_blob.size = md_len;
+  TpaData->ak_digest_blob.buffer = malloc(TpaData->ak_digest_blob.size + 1 * sizeof(u_int8_t));
+  memcpy(TpaData->ak_digest_blob.buffer, digest, TpaData->ak_digest_blob.size);
+  TpaData->ak_digest_blob.buffer[TpaData->ak_digest_blob.size] = '\0';
+  memcpy(whitelistBlob.ak_digest, digest, md_len);
+  whitelistBlob.ak_digest[SHA256_DIGEST_LENGTH] = '\0';
+   
+  FILE* whitelist_fp = fopen("../Whitelist_generator/whitelist", "rb");
+  if (!whitelist_fp) {
+    fprintf(stdout, "\nNo whitelist file found! Skipping whitelist verification!\n\n");
+  } else {
+    fscanf(whitelist_fp, "%d", &num_entries);
+    whitelistBlob.number_of_entries = num_entries;
+    whitelistBlob.white_entries = malloc(num_entries * sizeof(struct whitelist_entry));
+    if (!whitelistBlob.white_entries) {
+      fprintf(stdout, "OOM %d\n", num_entries);
+      return false;
+    }
+    loadWhitelist(whitelist_fp, whitelistBlob.white_entries, num_entries);
+    fclose(whitelist_fp);
+  }
+
+  /*WHITELIST_BLOB SIZE*/
+  bytes_to_send += SHA256_DIGEST_LENGTH * sizeof(u_int8_t);
+  bytes_to_send += sizeof(u_int16_t);
+  for(i = 0; i < whitelistBlob.number_of_entries; i++){
+    bytes_to_send += SHA256_DIGEST_LENGTH*2 * sizeof(u_int8_t);
+    bytes_to_send += sizeof(u_int16_t);
+    bytes_to_send += whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t);
+  }
+  /*AK_DIGEST SIZE*/
+  bytes_to_send += strlen(akPub); 
+  bytes_to_send += sizeof last;
+
+  to_send_data = malloc(bytes_to_send * sizeof(u_int8_t));
+
+  memcpy(to_send_data + acc, whitelistBlob.ak_digest, SHA256_DIGEST_LENGTH * sizeof(u_int8_t));
+  acc += SHA256_DIGEST_LENGTH * sizeof(u_int8_t);
+  memcpy(to_send_data + acc, &whitelistBlob.number_of_entries, sizeof(u_int16_t));
+  acc += sizeof(u_int16_t);
+  for(i = 0; i < whitelistBlob.number_of_entries; i++){
+    memcpy(to_send_data + acc, whitelistBlob.white_entries[i].digest, SHA256_DIGEST_LENGTH*2 * sizeof(u_int8_t));
+    acc += SHA256_DIGEST_LENGTH*2 * sizeof(u_int8_t);
+    memcpy(to_send_data + acc, &whitelistBlob.white_entries[i].path_len, sizeof(u_int16_t));
+    acc += sizeof(u_int16_t);
+    memcpy(to_send_data + acc, whitelistBlob.white_entries[i].path, whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t));
+    acc += whitelistBlob.white_entries[i].path_len * sizeof(u_int8_t);
+  }
+  /*AK_DIGEST ONLY*/
+  memcpy(to_send_data + acc, akPub, strlen(akPub) * sizeof(unsigned char));
+
+  memcpy(to_send_data + acc, last, sizeof last);
+  acc += sizeof last;
+  
+
+  free(digest);
+  free(to_send_data);
+  for(i = 0; i < whitelistBlob.number_of_entries; i++)
+    free(whitelistBlob.white_entries[i].path);
+  free(whitelistBlob.white_entries);
 }
 
 int tpm2_getCap_handles_persistent(ESYS_CONTEXT *esys_context, uint16_t *ek_handle, uint16_t *ak_handle) {

@@ -17,8 +17,6 @@
   }
 #define TPM2B_EMPTY_INIT TPM2B_INIT(0)
 
-#define MAX_RSA_KEY_BYTES ((2048 + 7) / 8)
-
 typedef struct tpm2_algorithm tpm2_algorithm;
 struct tpm2_algorithm {
   int count;
@@ -30,49 +28,6 @@ struct tpm2_pcrs {
   size_t count;
   TPML_DIGEST pcr_values[TPM2_MAX_PCRS];
 };
-
-typedef struct {
-  u_int8_t tag; // 0
-  u_int16_t size;
-  u_int8_t buffer[32];
-} NONCE_BLOB;
-
-typedef struct {
-  u_int8_t tag; // 1
-  u_int16_t size;
-  u_int8_t buffer[MAX_RSA_KEY_BYTES];
-} SIG_BLOB;
-
-typedef struct {
-  u_int8_t tag; // 2
-  u_int16_t size;
-  u_int8_t buffer[sizeof(TPMS_ATTEST)];
-} MESSAGE_BLOB;
-
-typedef struct {
-  u_int8_t tag; // 3
-  u_int16_t size;
-  u_int8_t *buffer;
-} AK_DIGEST_BLOB;
-
-typedef struct {
-  NONCE_BLOB nonce_blob;
-  SIG_BLOB sig_blob;
-  MESSAGE_BLOB message_blob;
-  IMA_LOG_BLOB ima_log_blob; // defined in /IMA/ima_read_writeOut_binary.h
-  AK_DIGEST_BLOB ak_digest_blob;
-} TO_SEND;
-
-struct whitelist_entry {
-    u_int8_t digest[SHA256_DIGEST_LENGTH*2+1];
-    u_int16_t path_len;
-    char *path;
-};
-typedef struct {
-  u_int8_t ak_digest[SHA256_DIGEST_LENGTH+1];
-  u_int16_t number_of_entries;
-  struct whitelist_entry *white_entries;
-} WHITELIST_BLOB;
 
 bool pcr_parse_list(const char *str, size_t len, TPMS_PCR_SELECTION *pcr_select);
 bool pcr_parse_selections(const char *arg, TPML_PCR_SELECTION *pcr_select);
